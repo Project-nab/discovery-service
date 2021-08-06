@@ -39,9 +39,11 @@ With that three user story, we breakdown to detail task have to finished in the 
   * Task 4: Implement frontend allow user place an order.
   
 ## Technical stacks
-We will user Java (version 8) with Spring boot, Spring cloud framework to build backend system for this web page.
+We will user Java (version 8) with Spring boot, Spring cloud framework to build backend system for this web page. Web application will be designed following microservice 
 
 // WRITE MORE REASON
 
 ## Microservice design
+
+![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/DeploymentDiagram.png?raw=true)
 
