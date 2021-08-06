@@ -67,5 +67,20 @@ We will user Java (version 8) with Spring boot, Spring cloud framework to build 
 
 Using Spring boot, Spring cloud, which rich feature support microservice and cloud, deploy a discovery service is quite easy. This service will allow microservice can find each other. In Spring cloud, we use netflix-eureka to deploy discovery service. 
 
-Before Cloud, we deploy on-premise backend system with API following architecture: 
+Before Cloud, we normally deploy on-premise backend system with API following architecture: 
+![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/OnpremiseDeployment.png?raw=true)
+
+With this architecture, we can scale system by horizontally, but everytime we have to hand-on deploy and hand-on configuration new endpoint on Load Balancing. With discovery service, and dockerlization, if one more instance is deployed (by hand-on or by docker service scale up) new service will automaticly register to Discovery service and another service can see it also share thoughput with new instance have just deployed.
+
+In Spring cloud already integrated with netflix-eureka was developed by Netfix when Neflix's developer facing with problem one service can find each other, they named it Eureka and opensource it, and Spring team has incorporate into Spring cloud, makin it easier to run up a Eureka Server.
+
+To create a Eureka service discovery, we just need to add spring-cloud-starter-netflix-eureka-server to our POM file:
+
+```xml
+        <dependency>
+            <!-- Eureka service registration - CHANGED -->
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+        </dependency>
+```
 
