@@ -47,3 +47,25 @@ We will user Java (version 8) with Spring boot, Spring cloud framework to build 
 
 ![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/DeploymentDiagram.png?raw=true)
 
+### Description
+
+* Base on requirement, scope and user story we already defined, we designed three microservice:
+  * Product service: This service responsibility to manage product, when user access web page, will all product, filter, search product will consume API from this service.
+  * Cart service: This service responsibility to manage shopping cart, when user add a product to shopping cart and checkout, will consume API from this service.
+  * Order service: This service responsibility to manage user place an order. When user place an order will consume to this service.
+
+* Futher more, we will have three basic module when we deploy on cloud is:
+  * APIGW: This module will take care routing to upstream service when have request from web page.
+  * Config service: This service responsibility is manage configuration of all microservice.
+  * Discovery service: This service responsibility is mange all three microservice (Order service, cart service, product service). Its will enable client side load-balancing and decouples service providers from consumers. We will use spring-cloud-starter-netflix-eureka-server for this part.
+
+* Within this scope and sprint, we will not design Load-balancing and event bus.
+  * Load-Balancing (LB): Normally, we will deploy one LB behind APIGW and load balancing to upstream microservice.
+  * Even bus: With even bus we can send a event from one service to another when a trigger is start, example when customer cancel order and have to return number of quantity of a product and delete shopping cart. In this scope, Order service will just consume Cart service API and Product service API to cancel the order.
+
+## Discovery service
+
+Using Spring boot, Spring cloud, which rich feature support microservice and cloud, deploy a discovery service is quite easy. This service will allow microservice can find each other. In Spring cloud, we use netflix-eureka to deploy discovery service. 
+
+Before Cloud, we deploy on-premise backend system with API following architecture: 
+
