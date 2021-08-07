@@ -63,9 +63,75 @@ We will user Java (version 8) with Spring boot, Spring cloud framework to build 
   * Load-Balancing (LB): Normally, we will deploy one LB behind APIGW and load balancing to upstream microservice.
   * Even bus: With even bus we can send a event from one service to another when a trigger is start, example when customer cancel order and have to return number of quantity of a product and delete shopping cart. In this scope, Order service will just consume Cart service API and Product service API to cancel the order.
 
+## Discovery service
+
+Discovery service Source code: [Discovery-service](https://github.com/Project-nab/discovery-service.git)
+
+Using Spring boot, Spring cloud, which rich feature support microservice and cloud, deploy a discovery service is quite easy. This service will allow microservice can find each other. In Spring cloud, we use netflix-eureka to deploy discovery service. 
+
+Before Cloud, we normally deploy on-premise backend system with API following architecture: 
+![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/OnpremiseDeployment.png?raw=true)
+
+With this architecture, we can scale system by horizontally, but everytime we have to hand-on deploy and hand-on configuration new endpoint on Load Balancing. With discovery service, and dockerlization, if one more instance is deployed (by hand-on or by docker service scale up) new service will automaticly register to Discovery service and another service can see it also share thoughput with new instance have just deployed.
+
+In Spring cloud already integrated with netflix-eureka was developed by Netfix when Neflix's developer facing with problem one service can find each other, they named it Eureka and opensource it, and Spring team has incorporate into Spring cloud, makin it easier to run up a Eureka Server.
+
+To create a Eureka service discovery, we just need to add spring-cloud-starter-netflix-eureka-server to our POM file:
+
+```xml
+        <dependency>
+            <!-- Eureka service registration - CHANGED -->
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+        </dependency>
+```
+
+And in like another Spring family config, we have to enable @EnableEurekaServer to start an Eureka server discovery and registry.
+
+```java
+@SpringBootApplication
+@EnableEurekaServer
+public class Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+```
+
+One more thing we have to do is we create application.properties to config some basic config like server host, port 
+
+```properties
+server.port=8000
+eureka.instance.hostname=localhost
+eureka.client.registerWithEureka=false
+eureka.client.fetchRegistry=false
+```
+
+* server.port: Listening port
+* eureka.instance.hostname: hostname of eureka
+* eureka.client.registerWithEureka and eureka.client.fetchRegistry: Don't register discovery service with yourself.
+
+Let build and start our discovery service, and test is discovery service working?
+
+```bash
+curl localhost:8000/eureka/apps
+```
+
+To check is there any app register to eureka and bellow is response:
+
+```xml
+<applications>
+  <versions__delta>1</versions__delta>
+  <apps__hashcode></apps__hashcode>
+</applications>
+```
+
+We can see that Discovery service started but don't have any app connected yet.
+
 ## Configuration service
 
-Now, let move on to some code and configuration. First of all, we will build a configuration service for our microservice architecture.
+Now, we will build a configuration service for our microservice architecture.
 
 Spring cloud config provides server-side and client-side support for externalized configuration in a distributed system. With configuration service, we will have a central place to manage all properties of our microservice across all environments. When a service started, I will connect to configuration service to load all of the configuration of its and environment.
 
@@ -125,7 +191,7 @@ spring.security.user.password=password
 * spring.security.user.name: username will be used when query configuration
 * spring.security.user.password: password will be used when query configuration
 
-Now, we will build and start configuration service and try to query discovery-service's config to see the result:
+Now, we will build and start configuration service and try to test query discovery-service's config to see the result:
 
 ```bash
 curl http://baonc:password@localhost:8001/discovery-config/development/master
@@ -156,83 +222,91 @@ It will return config was setup for discovery-service:
 }
 ```
 
-Following return result, we can see our's discovery service will listen on port 8000 at localhost. When discovery service started, I will load this config and start.
+The last thing we have to do is integrating configuration service with discovery service, its allow another service can see configuration service and load config when started.
 
-## Discovery service
-
-Discovery service Source code: [Discovery-service](https://github.com/Project-nab/discovery-service.git)
-
-Using Spring boot, Spring cloud, which rich feature support microservice and cloud, deploy a discovery service is quite easy. This service will allow microservice can find each other. In Spring cloud, we use netflix-eureka to deploy discovery service. 
-
-Before Cloud, we normally deploy on-premise backend system with API following architecture: 
-![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/OnpremiseDeployment.png?raw=true)
-
-With this architecture, we can scale system by horizontally, but everytime we have to hand-on deploy and hand-on configuration new endpoint on Load Balancing. With discovery service, and dockerlization, if one more instance is deployed (by hand-on or by docker service scale up) new service will automaticly register to Discovery service and another service can see it also share thoughput with new instance have just deployed.
-
-In Spring cloud already integrated with netflix-eureka was developed by Netfix when Neflix's developer facing with problem one service can find each other, they named it Eureka and opensource it, and Spring team has incorporate into Spring cloud, makin it easier to run up a Eureka Server.
-
-To create a Eureka service discovery, we just need to add spring-cloud-starter-netflix-eureka-server to our POM file:
+First, we have to add spring-cloud-starter-netflix-eureka-client to our POM file:
 
 ```xml
         <dependency>
-            <!-- Eureka service registration - CHANGED -->
             <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
 ```
 
-And in like another Spring family config, we have to enable @EnableEurekaServer to start an Eureka server discovery and registry.
+And in Application.java, we have to enable @EnableDiscoveryClient annotation.
 
-```java
+```
 @SpringBootApplication
-@EnableEurekaServer
+@EnableConfigServer
+@EnableDiscoveryClient
 public class Application {
-
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);
     }
 }
 ```
 
-One more thing we have to do is integrating discovery service with configuration service above we already deployed and declare some basic configuration.
-
-To do it, we will create a bootstrap.properties to config endpoint to our configuration service, every time discovery service started. 
+And finally, in configuration file (application.properties) we add more basic config to Discovery server.
 
 ```properties
-spring.application.name=discovery-service
-spring.profiles.active=development
-spring.cloud.config.uri=http://localhost:8001
-spring.cloud.config.username=baonc
-spring.cloud.config.password=password
-
-management.endpoints.web.exposure.include=*
+spring.application.name=configuration-service
+eureka.client.service-url.defaultZone =http://localhost:8000/eureka/
 ```
 
-* spring.application.name: name of the service, in this case, we are config for discovery-service
+* spring.application.name: This is service name will be registered to Discovery service
+* eureka.client.service-url.defaultZone: This is discovery service URI.
 
-* spring.profiles.active: working profile, now we are working on development profile
-
-* spring.cloud.config.uri: the URI of configuration service
-
-* spring.cloud.config.username: user name to connect to configuration service
-
-* spring.cloud.config.password: Password to connect to configuration service
-
-* management.endpoints.web.exposure.include: this will expose /refresh endpoint for us can reload configuration without restart the application.
-
-Let build and start our discovery service, we can easy to see that discovery service already connect to configuration service, load config when bootstrap and listening on port 8000
+Now, let build and start configuration service and test is configuration service register with discovery service? 
 
 ```bash
-curl localhost:8000/eureka/apps
+curl http://localhost:8000/eureka/apps/
 ```
 
-To check is there any app register to eureka and bellow is response:
+Now, we can see the response return have CONFIGURATION-SERVICE register to Discovery service bellow
 
 ```xml
 <applications>
   <versions__delta>1</versions__delta>
-  <apps__hashcode></apps__hashcode>
+  <apps__hashcode>UP_1_</apps__hashcode>
+  <application>
+    <name>CONFIGURATION-SERVICE</name>
+    <instance>
+      <instanceId>localhost:configuration-service:8001</instanceId>
+      <hostName>localhost</hostName>
+      <app>CONFIGURATION-SERVICE</app>
+      <ipAddr>192.168.1.3</ipAddr>
+      <status>UP</status>
+      <overriddenstatus>UNKNOWN</overriddenstatus>
+      <port enabled="true">8001</port>
+      <securePort enabled="false">443</securePort>
+      <countryId>1</countryId>
+      <dataCenterInfo class="com.netflix.appinfo.InstanceInfo$DefaultDataCenterInfo">
+        <name>MyOwn</name>
+      </dataCenterInfo>
+      <leaseInfo>
+        <renewalIntervalInSecs>30</renewalIntervalInSecs>
+        <durationInSecs>90</durationInSecs>
+        <registrationTimestamp>1628332613186</registrationTimestamp>
+        <lastRenewalTimestamp>1628332613186</lastRenewalTimestamp>
+        <evictionTimestamp>0</evictionTimestamp>
+        <serviceUpTimestamp>1628332613186</serviceUpTimestamp>
+      </leaseInfo>
+      <metadata>
+        <management.port>8001</management.port>
+      </metadata>
+      <homePageUrl>http://localhost:8001/</homePageUrl>
+      <statusPageUrl>http://localhost:8001/actuator/info</statusPageUrl>
+      <healthCheckUrl>http://localhost:8001/actuator/health</healthCheckUrl>
+      <vipAddress>configuration-service</vipAddress>
+      <secureVipAddress>configuration-service</secureVipAddress>
+      <isCoordinatingDiscoveryServer>false</isCoordinatingDiscoveryServer>
+      <lastUpdatedTimestamp>1628332613187</lastUpdatedTimestamp>
+      <lastDirtyTimestamp>1628332613044</lastDirtyTimestamp>
+      <actionType>ADDED</actionType>
+    </instance>
+  </application>
 </applications>
 ```
 
-We can see that, dont have any app connected yet, its time we start to build our microservice to solve the problem.
+It's work!
+
