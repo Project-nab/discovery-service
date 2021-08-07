@@ -9,6 +9,15 @@ limited set of functionalities:
 2. If the customer finds a product that they like, they can view its details and add it to their shopping cart and processed to place an order.
 3. No online payment is supported yet. The customer is required to pay by cash when the product got deliveried.
 
+## Highlight
+
+Before we go detail, this is some highlight noted:
+
+1. Discovery service listen on port 8000, and source code at: [Discovery service](https://github.com/Project-nab/discovery-service.git)
+2. Configuration service listen on port 8001, and source code at: [Configuration service](https://github.com/Project-nab/configuration-service.git)
+3. All config in this project will be storage centralize at: [config-repo](https://github.com/Project-nab/config-repo.git), another config will load config when starting via configuration service.
+4. APIGW service listen on port 8002, and source code at: [APIGW service](https://github.com/Project-nab/gateway-service.git)
+
 ## Project analysis
 
 Because the company (iCommerce) wants to build an MVP (minimum viable product) to release to market as soon as possible. And we just have 1 week to finish all of the requirements. So we will apply agile methodology with 1 sprint is 1 week (from 05/08/2021 to 12/08/2021) to finished the first version of the application.
@@ -35,6 +44,7 @@ With that three user story, we breakdown to detail task have to finished in the 
 
   * Task 1: Implement API to add a product to shopping cart.
   * Task 2: Implement API to place an order.
+    * Task 2.1: Implement API to update product quantity when customer place an order or cancel an order
   * Task 3: Implement frontend allow user add a product to shopping cart.
   * Task 4: Implement frontend allow user place an order.
   
@@ -309,4 +319,109 @@ Now, we can see the response return have CONFIGURATION-SERVICE register to Disco
 ```
 
 It's work!
+
+## API gateway
+
+API gateway source code: [APIGW](https://github.com/Project-nab/gateway-service.git)
+
+Now, we already have Discovery service and Configuration service, we will use this two service to config and deploy APIGW service, following our microservice architecture.
+
+First of all, we have to create a configuration file on [config-repo](https://github.com/Project-nab/config-repo.git) named: gateway-service.properties
+
+```properties
+server.port=8002
+
+spring.application.name=gateway-service
+eureka.client.service-url.defaultZone=http://localhost:8000/eureka/
+
+# Configuration service routing
+spring.cloud.gateway.routes[0].id=configuration
+spring.cloud.gateway.routes[0].uri=lb://CONFIGURATION-SERVICE
+spring.cloud.gateway.routes[0].predicates[0].name=Path
+spring.cloud.gateway.routes[0].predicates[0].args[pattern]=/gateway-service/**
+```
+
+As mention in Configuration service session, this configuration file will storage central config and will be loaded when gateway-service started.
+
+* server.port: Listening port of APIGW
+* spring.application.name: Name of application when register to Discovery service
+* eureka.client.service-url.defaultZone: Discovery Service URL, here we already register with Discovery service, so we can use directly Service-ID, and Discovery service will return to us real IP (DNS and Load-balancing)
+* spring.cloud.gateway.routes[0].id: Routing config id
+* spring.cloud.gateway.routes[0].uri: Routing config URI, the URL will be forwarded when request matched predicates.
+* spring.cloud.gateway.routes[0].predicates[0].name: Predicates matching type, Path, host...
+* spring.cloud.gateway.routes[0].predicates[0].args[pattern]: Predicates matching pattern, here we config if request have pattern /gateway-service/**
+
+Next, we have to create bootstrap.properties in resources folder to  let gateway-service load configuration value when bootstrap the service (when it starting).
+
+```properties
+spring.application.name=gateway-service
+spring.profiles.active=development
+spring.cloud.config.uri=http://localhost:8001
+spring.cloud.config.username=baonc
+spring.cloud.config.password=password
+
+management.endpoints.web.exposure.include=*
+```
+
+This is some basic config for gateway can bootstrap, Gateway-service will read configuration in bootstrap.properties, and load configuration from configuration service http://localhost:8001 (which we config above), with name gateway-service, profile development, and branch on git is master.
+
+Let build and start gateway-service and make some testing.
+
+We will curl to gateway-service configuration via APIGW we have just started.
+
+```bash
+curl baonc:password@localhost:8002/gateway-service/development
+```
+
+At this part, we can see:
+
+* localhost:8002 is domain and port of API gateway, which we config [here](https://github.com/Project-nab/config-repo/blob/master/gateway-service.properties)
+* gateway-service: is predicates path
+* development: is config profile.
+
+And we will get return
+
+```json
+{
+  "name": "gateway-service",
+  "profiles": [
+    "development"
+  ],
+  "label": null,
+  "version": "0557f90ee7f41353275997720e8ac56880f9cc24",
+  "state": null,
+  "propertySources": [
+    {
+      "name": "https://github.com/Project-nab/config-repo.git/gateway-service.properties",
+      "source": {
+        "server.port": "8002",
+        "spring.application.name": "gateway-service",
+        "eureka.client.service-url.defaultZone": "http://localhost:8000/eureka/",
+        "spring.cloud.gateway.routes[0].id": "configuration",
+        "spring.cloud.gateway.routes[0].uri": "lb://CONFIGURATION-SERVICE",
+        "spring.cloud.gateway.routes[0].predicates[0].name": "Path",
+        "spring.cloud.gateway.routes[0].predicates[0].args[pattern]": "/gateway-service/**"
+      }
+    }
+  ]
+}
+```
+
+As we can see, its configuration of gateway service, we get it via APIGW, APIGW routing to configuration service, and return it back.
+
+Following our microservice architecture, we already have three basic service (Discovery service, Config service and APIGW service). Let move on to our three remaining business service (product-service, cart-service, order-service)
+
+## Product-service
+
+### Analysis
+
+In this sprint, and following detail task we already defined at [Project analysis](https://github.com/Project-nab/discovery-service#project-analysis), In product service, we have to implement following API.
+
+* API filter product base on criteria.
+* API search product by keywork
+* API update product quantity when customer place an order or cancel place an order (Will be consume by order-service, or listening from even bus).
+
+### Database design
+
+
 
