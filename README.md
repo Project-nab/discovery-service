@@ -160,6 +160,8 @@ Following return result, we can see our's discovery service will listen on port 
 
 ## Discovery service
 
+Discovery service Source code: [Discovery-service](https://github.com/Project-nab/discovery-service.git)
+
 Using Spring boot, Spring cloud, which rich feature support microservice and cloud, deploy a discovery service is quite easy. This service will allow microservice can find each other. In Spring cloud, we use netflix-eureka to deploy discovery service. 
 
 Before Cloud, we normally deploy on-premise backend system with API following architecture: 
