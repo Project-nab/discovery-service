@@ -423,5 +423,22 @@ In this sprint, and following detail task we already defined at [Project analysi
 
 ### Database design
 
+#### ER  Diagram
+
+![ERD-product-service](https://github.com/Project-nab/discovery-service/blob/master/media/ERD-Product-service.png?raw=true)
+
+Base on requirement, we design ERD for product service following:
+
+* Fist of all, we have Product Catalouge entity, this entity will storage which category a product belong to.
+* And then, each Product Catalouge has many Brand.
+* Each Brand has many Product
+* Each Product has many Product Variant and each Product Variants may have each price, each quantity...
+* Each Product variant has many Variant, such as color, size...
+* Two entity Variant Option and Variant Value to mapping product attribute for us can easily to manage.
+
+#### Database diagram
+
+Base on ER Diagram, we can deepdown design database diagram following
+
 
 
