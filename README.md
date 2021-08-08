@@ -234,7 +234,7 @@ It will return config was setup for discovery-service:
 
 The last thing we have to do is integrating configuration service with discovery service, its allow another service can see configuration service and load config when started.
 
-First, we have to add spring-cloud-starter-netflix-eureka-client to our POM file:
+First, we have to add ```spring-cloud-starter-netflix-eureka-client``` to our POM file:
 
 ```xml
         <dependency>
@@ -324,9 +324,44 @@ It's work!
 
 API gateway source code: [APIGW](https://github.com/Project-nab/gateway-service.git)
 
-Now, we already have Discovery service and Configuration service, we will use this two service to config and deploy APIGW service, following our microservice architecture.
+Now, we already have Discovery service and Configuration service, we will use this two service to config and deploy APIGW service, following our microservice architecture. API GW will start, loading config from Configuration service, and Connect to Discovery service. 
 
-First of all, we have to create a configuration file on [config-repo](https://github.com/Project-nab/config-repo.git) named: gateway-service.properties
+To create an Spring cloud APIGW and connect to Discovery service and Configuration service, we have to add three main dependencies
+
+```xml
+		<dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+```
+
+The dependency ```spring-cloud-starter-gateway``` to define that our service is using Spring cloud gateway. Dependency ```spring-cloud-stater-netflix-eureka-client``` to will add our service can register to Discovery service and finally ```spring-cloud-starter-config``` allow us to connect to our Configuration service.
+
+Like another Spring boot application, we have to add annotation ```@SpringBootApplication``` on our main class
+
+```
+@SpringBootApplication
+@EnableEurekaClient
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+```
+
+Here, we also add one more annotation ```@EnableEurekaClient``` to enable Discovery client then our service can register to Discovery service, it will heart beat to discovery service each 30s (default), and Discovery service will know that our service still alive.
+
+And then, we have to create a configuration file on [config-repo](https://github.com/Project-nab/config-repo.git) named: gateway-service.properties
 
 ```properties
 server.port=8002
@@ -347,7 +382,7 @@ As mention in Configuration service session, this configuration file will storag
 * spring.application.name: Name of application when register to Discovery service
 * eureka.client.service-url.defaultZone: Discovery Service URL, here we already register with Discovery service, so we can use directly Service-ID, and Discovery service will return to us real IP (DNS and Load-balancing)
 * spring.cloud.gateway.routes[0].id: Routing config id
-* spring.cloud.gateway.routes[0].uri: Routing config URI, the URL will be forwarded when request matched predicates.
+* spring.cloud.gateway.routes[0].uri: Routing config URI, the URL will be forwarded when request matched predicates. Because we already register to Discovery service, so we can directly using service id to routing URI here ```lb:\\CONFIGURATION-SERVICE``` 
 * spring.cloud.gateway.routes[0].predicates[0].name: Predicates matching type, Path, host...
 * spring.cloud.gateway.routes[0].predicates[0].args[pattern]: Predicates matching pattern, here we config if request have pattern /gateway-service/**
 
@@ -417,6 +452,8 @@ Following our microservice architecture, we already have three basic service (Di
 
 In this sprint, and following detail task we already defined at [Project analysis](https://github.com/Project-nab/discovery-service#project-analysis), In product service, we have to implement following API.
 
+* API get all product
+
 * API filter product base on criteria.
 * API search product by keywork
 * API update product quantity when customer place an order or cancel place an order (Will be consume by order-service, or listening from even bus).
@@ -440,5 +477,5 @@ Base on requirement, we design ERD for product service following:
 
 Base on ER Diagram, we can deepdown design database diagram following
 
-
+![Product-database-diagram](https://github.com/Project-nab/discovery-service/blob/master/media/Product-database.png?raw=true)
 
