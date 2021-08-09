@@ -462,7 +462,7 @@ In this sprint, and following detail task we already defined at [Project analysi
 
 #### ER  Diagram
 
-![ERD-product-service](https://github.com/Project-nab/discovery-service/blob/master/media/ERD-Product-service-01.png?raw=true)
+![ERD-product-service](https://github.com/Project-nab/discovery-service/blob/master/media/ERD-PRODUCT.png?raw=true)
 
 Base on requirement, we design ERD for product service following:
 
@@ -474,5 +474,7 @@ Base on requirement, we design ERD for product service following:
 
 Base on ER Diagram, we can deep-down design database diagram following, in product table, we add more column ```product_catalogue_id``` for us can query faster.
 
-![Product-database-diagram](https://github.com/Project-nab/discovery-service/blob/master/media/product-database-01.png?raw=true)
+![Product-database-diagram](https://github.com/Project-nab/discovery-service/blob/master/media/PRODUCT-DB.png?raw=true)Code Structure
+
+### Code structure
 
