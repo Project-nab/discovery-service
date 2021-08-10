@@ -453,6 +453,16 @@ We deploy microservice, in the future, scaling is very important and logging is 
 
 In this project, we will use ```Zipkin``` as tracing system (view end-to-end communication) and ```Spring Cloud Sleuth``` in each service to implementation traceId generation and passing it along the service calls including it in the logs.
 
+Download ```Zipkin``` and start it with
+
+```bash
+java -jar zipkin.jar
+```
+
+Open ```localhost:9411``` and we will see the log tracing
+
+![zipkin](https://github.com/Project-nab/discovery-service/blob/master/media/Zipkin.PNG?raw=true)
+
 ## Product-service
 
 ### Analysis
