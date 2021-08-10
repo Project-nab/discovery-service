@@ -17,6 +17,8 @@ Before we go detail, this is some highlight noted:
 2. Configuration service listen on port 8001, and source code at: [Configuration service](https://github.com/Project-nab/configuration-service.git)
 3. All config in this project will be storage centralize at: [config-repo](https://github.com/Project-nab/config-repo.git), another config will load config when starting via configuration service.
 4. APIGW service listen on port 8002, and source code at: [APIGW service](https://github.com/Project-nab/gateway-service.git)
+5. Be sure that your local has been installed ```redis``` for caching, and rate-limit gateway purpose.
+6. Be sure that your local have ```Zipkin``` for log tracing.
 
 ## Project analysis
 
@@ -55,7 +57,7 @@ We will user Java (version 8) with Spring boot, Spring cloud framework to build 
 
 ## Microservice design
 
-![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/DeploymentDiagram.png?raw=true)
+![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/DeploymentDiagramV2.png?raw=true)
 
 ### Description
 
@@ -68,10 +70,9 @@ We will user Java (version 8) with Spring boot, Spring cloud framework to build 
   * APIGW: This module will take care routing to upstream service when have request from web page.
   * Config service: This service responsibility is manage configuration of all microservice.
   * Discovery service: This service responsibility is mange all three microservice (Order service, cart service, product service). Its will enable client side load-balancing and decouples service providers from consumers. We will use spring-cloud-starter-netflix-eureka-server for this part.
-
-* Within this scope and sprint, we will not design Load-balancing and event bus.
-  * Load-Balancing (LB): Normally, we will deploy one LB behind APIGW and load balancing to upstream microservice.
-  * Even bus: With even bus we can send a event from one service to another when a trigger is start, example when customer cancel order and have to return number of quantity of a product and delete shopping cart. In this scope, Order service will just consume Cart service API and Product service API to cancel the order.
+  * Logging service: This service will manage all of our microservice logging. In microservice, a service have to communicate with the others service, so we need logging to tracing and monitoring it. We will use ```starter-sleuth``` and ```sleuth-zipkin``` to archive it.
+  * Caching: We will have a distributed caching, when a API called, we will query on cache first, if don't have in cache, we move to database and update cache. In our project, we will using ```redis``` as cache
+  
 
 ## Discovery service
 
@@ -446,6 +447,12 @@ As we can see, its configuration of gateway service, we get it via APIGW, APIGW 
 
 Following our microservice architecture, we already have three basic service (Discovery service, Config service and APIGW service). Let move on to our three remaining business service (product-service, cart-service, order-service)
 
+## Logging service
+
+We deploy microservice, in the future, scaling is very important and logging is important as part of it. We have manage log of all service, each service communicate with each other... It's not only helps us in troubleshooting the issues but also help us in understanding the behavior of our softwares.
+
+In this project, we will use ```Zipkin``` as tracing system (view end-to-end communication) and ```Spring Cloud Sleuth``` in each service to implementation traceId generation and passing it along the service calls including it in the logs.
+
 ## Product-service
 
 ### Analysis
@@ -676,7 +683,125 @@ With filter API, we will use Dynamic query in Spring called ```Specification```.
 
 Because filter can be combination of product catalogue, brand, color, prince min, price max and in the future, maybe filter by more criteria, using ```Specification``` make us easy to control and extend code (not modify - Open to extension, Close to modification)
 
+In ```ProductSerivce``` we use ```@Cacheable``` to connect to our redis listen on port 6379 (localhost) and save query result at ```[findProduct]``` cache.
+
+```java
+    @Override
+    @Cacheable(value = "findProduct")
+    public Page<Product> findProduct(String category, String brand, String color, Double priceMin, Double priceMax, int offset, int limit) {
+        ProductQuery productQuery = new ProductQuery(category, brand, color, priceMin, priceMax);
+        Page<Product> pages = productRepo.findAll(productSpecification.build(productQuery), PageRequest.of(offset, limit));
+        return pages;
+    }
+```
+
+
+
 #### API get product detail
 
 This API is quite easy, we will find in cache first, and if in cache don't have, we will query from database.
+
+```java
+    @Override
+    @Cacheable(value = "findProductDetail")
+    public Product findByCode(String productId) {
+        log.info("Find product by Id {}", productId);
+        Optional<Product> productOptional = productRepo.findById(productId);
+        return productOptional.orElse(null);
+    }
+```
+
+### Data preparation
+
+We also create some data in ```data.sql``` to prepare some data for testing purpose
+
+```sql
+-- Insert some data to brand table
+insert into brand(brand_code, address, name) values('ADIDAS', 'GERMANY', 'ADIDAS');
+-- insert some data to product catalogue table
+insert into product_catalogue(catalogue_code, catalogue_name, catalogue_type) values('ADIDAS_01', 'Fashion', 0);
+-- insert some data to product table
+insert into product(product_code, color, price, product_name, quantity, brand_code, product_catalogue_code) values
+('ADIDAS_TSHIRT_01', 0, 50, 'T-shirt', 100, 'ADIDAS', 'ADIDAS_01');
+```
+
+### Curl
+
+Now let build, run unit test and ```curl``` some API from APIGW (APIGW listen on port 8002) to see the result
+
+API filter product list
+
+```bash
+curl localhost:8002/product-service/v1/products?categoryCode=ADIDAS_01
+```
+
+Response
+
+```json
+{
+    "errorCode": 200,
+    "message": "Get product successful",
+    "result": {
+        "content": [
+            {
+                "code": "ADIDAS_TSHIRT_01",
+                "productName": "T-shirt",
+                "thumnail": null,
+                "createdAt": null,
+                "updatedAt": null,
+                "color": "RED",
+                "price": 50.0,
+                "quantity": 100
+            }
+        ],
+        "pageable": {
+            "sort": {
+                "sorted": false,
+                "unsorted": true
+            },
+            "offset": 0,
+            "pageNumber": 0,
+            "pageSize": 10,
+            "paged": true,
+            "unpaged": false
+        },
+        "last": true,
+        "totalElements": 1,
+        "totalPages": 1,
+        "size": 10,
+        "number": 0,
+        "sort": {
+            "sorted": false,
+            "unsorted": true
+        },
+        "numberOfElements": 1,
+        "first": true
+    }
+}
+```
+
+API get product detail
+
+```bash
+curl localhost:8002/product-service/v1/products/ADIDAS_TSHIRT_01
+```
+
+Response
+
+```json
+{
+    "errorCode": 200,
+    "message": "Success",
+    "result": {
+        "code": "ADIDAS_TSHIRT_01",
+        "productName": "T-shirt",
+        "thumnail": null,
+        "createdAt": null,
+        "updatedAt": null,
+        "color": "RED",
+        "price": 50.0,
+        "quantity": 100
+    }
+}
+```
 
