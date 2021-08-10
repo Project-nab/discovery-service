@@ -5,7 +5,7 @@ A small start-up named "iCommerce" wants to build a very simple shopping applica
 products. In order to get to the market quickly, they just want to build an MVP version with very 
 limited set of functionalities:
 
-1. The application is simply a simple web page that shows all products on which customers can filter and search for products based on different criteria such as category, name, price, brand, colour.
+1. The application is simply a simple web page that shows all products on which customers can filter and search for products based on different criteria such as category, name, price, brand, color.
 2. If the customer finds a product that they like, they can view its details and add it to their shopping cart and processed to place an order.
 3. No online payment is supported yet. The customer is required to pay by cash when the product got deliveried.
 
@@ -19,6 +19,7 @@ Before we go detail, this is some highlight noted:
 4. APIGW service listen on port 8002, and source code at: [APIGW service](https://github.com/Project-nab/gateway-service.git)
 5. Be sure that your local has been installed ```redis``` for caching, and rate-limit gateway purpose.
 6. Be sure that your local have ```Zipkin``` for log tracing.
+7. Product service listen on port 8003, and source code at: [Product service](https://github.com/Project-nab/product-service.git)
 
 ## Project analysis
 
@@ -53,11 +54,11 @@ With that three user story, we breakdown to detail task have to finished in the 
 ## Technical stacks
 We will user Java (version 8) with Spring boot, Spring cloud framework to build backend system for this web page. Web application will be designed following microservice 
 
-// WRITE MORE REASON
+For Frontend we use AngularJS, it's the one of the most javascript framework use to develop web application
 
 ## Microservice design
 
-![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/DeploymentDiagramV2.png?raw=true)
+![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/DeploymentDiagramV3.png?raw=true)
 
 ### Description
 
@@ -70,7 +71,7 @@ We will user Java (version 8) with Spring boot, Spring cloud framework to build 
   * APIGW: This module will take care routing to upstream service when have request from web page.
   * Config service: This service responsibility is manage configuration of all microservice.
   * Discovery service: This service responsibility is mange all three microservice (Order service, cart service, product service). Its will enable client side load-balancing and decouples service providers from consumers. We will use spring-cloud-starter-netflix-eureka-server for this part.
-  * Logging service: This service will manage all of our microservice logging. In microservice, a service have to communicate with the others service, so we need logging to tracing and monitoring it. We will use ```starter-sleuth``` and ```sleuth-zipkin``` to archive it.
+  * Distributed tracing: This service will manage all of our microservice logging. In microservice, a service have to communicate with the others service, so we need logging to tracing and monitoring it. We will use ```starter-sleuth``` and ```sleuth-zipkin``` to archive it.
   * Caching: We will have a distributed caching, when a API called, we will query on cache first, if don't have in cache, we move to database and update cache. In our project, we will using ```redis``` as cache
   
 
@@ -447,7 +448,7 @@ As we can see, its configuration of gateway service, we get it via APIGW, APIGW 
 
 Following our microservice architecture, we already have three basic service (Discovery service, Config service and APIGW service). Let move on to our three remaining business service (product-service, cart-service, order-service)
 
-## Logging service
+## Distributed tracing
 
 We deploy microservice, in the future, scaling is very important and logging is important as part of it. We have manage log of all service, each service communicate with each other... It's not only helps us in troubleshooting the issues but also help us in understanding the behavior of our softwares.
 
@@ -519,6 +520,8 @@ Like other Spring boot, Spring cloud application, we have to add some main depen
 ```h2``` database for our application can run locally (in mem database)
 
 ```starter-cache``` and ```starter-data-redis``` for caching
+
+```starter-sleuth``` and ```starter-sleuth-zipkin``` for distributed tracing log
 
 ### Unit test
 
