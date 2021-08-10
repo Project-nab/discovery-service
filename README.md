@@ -452,10 +452,8 @@ Following our microservice architecture, we already have three basic service (Di
 
 In this sprint, and following detail task we already defined at [Project analysis](https://github.com/Project-nab/discovery-service#project-analysis), In product service, we have to implement following API.
 
-* API get all product
-
 * API filter product base on criteria.
-* API search product by keywork
+* API detail a product
 * API update product quantity when customer place an order or cancel place an order (Will be consume by order-service, or listening from even bus).
 
 ### Database design
@@ -477,4 +475,208 @@ Base on ER Diagram, we can deep-down design database diagram following, in produ
 ![Product-database-diagram](https://github.com/Project-nab/discovery-service/blob/master/media/PRODUCT-DB.png?raw=true)Code Structure
 
 ### Code structure
+
+![CodeStructure](https://github.com/Project-nab/discovery-service/blob/master/media/CodeStructure.png?raw=true)
+
+Basically, our service will have four layers
+
+* Controller: where we expose RestAPI to APIGW.
+* Service: where we do business logic
+* Repository: where we translate domains (entity) to the database 
+* Entity (Domain): where we save our entity table.
+
+We following SOLID principal to implement code. 
+
+### Dependencies
+
+Like other Spring boot, Spring cloud application, we have to add some main dependencies
+
+```eureka-client``` to connect to discovery service
+
+```stater-config``` to connect to configuration service
+
+```starter-data-jpa``` for ORM (Mapping database, control connection pool...)
+
+```starter-test```, ```junit-jupiter-api``` for Unit test
+
+```h2``` database for our application can run locally (in mem database)
+
+```starter-cache``` and ```starter-data-redis``` for caching
+
+### Unit test
+
+Before we go to write code implementation, let write some unit test first (Don't afraid errors). After that, we will implement code to pass all the test case. All unit test is allocated at ```src/test/java/com/icomerce/shopping/product/services/impl```
+
+#### Product service test
+
+Prepare some testing data
+
+```java
+@Before
+    public void setup() {
+        // Brand name ADIDAS
+        Brand brand = new Brand("ADIDAS", "ADIDAS", "GERMANY", null, null, null);
+        Brand createdBrand = brandRepo.save(brand);
+        // Product catalogue FASHION
+        ProductCatalogue productCatalogue = new ProductCatalogue("ADIDAS_01", "FASHION", CatalogueType.FASHION,
+                null, null, null);
+        ProductCatalogue createdCatalogue = productCatalogueRepo.save(productCatalogue);
+
+        // T-shirt, color BLUE, price 80USD, brand ADIDAS, category FASHION
+        Product product = new Product("ADIDAS_TSHIRT_01", "T-shirt", "", Timestamp.valueOf(LocalDateTime.now()), Timestamp.valueOf(LocalDateTime.now()),
+                createdBrand, createdCatalogue, Color.BLUE, 80D, 100);
+        productRepo.save(product);
+        // T-shirt, color YELLOW, price 50USD, brand ADIDAS, category FASHION
+        product = new Product("ADIDAS_TSHIRT_02", "T-shirt", "", Timestamp.valueOf(LocalDateTime.now()), Timestamp.valueOf(LocalDateTime.now()),
+                createdBrand, createdCatalogue, Color.YELLOW, 50D, 100);
+        productRepo.save(product);
+
+        // Brand name APPLE
+        brand = new Brand("APPLE", "APPLE", "GERMANY", null, null, null);
+        createdBrand = brandRepo.save(brand);
+
+        // Product catalogue TECHNOLOGY
+        productCatalogue = new ProductCatalogue("APPLE_01", "TECHNOLOGY", CatalogueType.TECHNOLOGY,
+                null, null, null);
+        createdCatalogue = productCatalogueRepo.save(productCatalogue);
+
+        // Iphone, color BLACK, Price 1000USD, brand APPLE, category TECHNOLOGY
+        product = new Product("IPHONEX_01", "iPhone", "", Timestamp.valueOf(LocalDateTime.now()), Timestamp.valueOf(LocalDateTime.now()),
+                createdBrand, createdCatalogue, Color.BLACK, 1000D, 100);
+        productRepo.save(product);
+    }
+```
+
+Because all of the repository like ```BrandRepo```, ```ProductCatalogueRepo```, ```ProductRepo``` now is just interface, so we don't need to care about it.
+
+Some unit test for ```Product service```
+
+```java
+    @Test
+	// No filter
+    public void whenFilterAll_thenReturnAllProduct() {
+        // When
+        Page<Product> products = productService.findProduct(null, null, null, null,
+                null, 0, 10);
+        // Then
+        assertEquals(3, products.getTotalElements());
+    }
+
+    @Test
+	// Filter by category and price range from 50USD to 60USD
+    public void whenFilterCatalogueAndPrice_thenReturnProductInCatalogueAndPrice() {
+        // when
+        Page<Product> products = productService.findProduct("ADIDAS_01", null, null, 50D,
+                60D, 0, 10);
+        // Then
+        assertEquals(1, products.getTotalElements());
+    }
+	...
+    // More test case here
+    ...
+```
+
+#### Brand service test
+
+We also write test case for brand service test.
+
+```java
+    @Test
+    public void whenCreate_thenReturnBrand() {
+        // When
+        Brand brand = new Brand("APPLE", "APPLE", "USA", Timestamp.valueOf(LocalDateTime.now()),
+                Timestamp.valueOf(LocalDateTime.now()), null);
+        Brand createdBrand = brandService.create(brand);
+
+        // Then
+        assertEquals("APPLE", createdBrand.getCode());
+        assertEquals("USA", createdBrand.getAddress());
+    }
+
+    @Test
+    public void whenFindAll_thenReturnAll() {
+        // When
+        List<Brand> brands = brandService.findAll();
+
+        // Then
+        assertEquals(1, brands.size());
+    }
+```
+
+
+
+#### Product catalogue service test
+
+And Product catalogue service test
+
+```java
+@Test
+    public void whenCreate_thenReturnCatalogue() {
+        // When
+        ProductCatalogue productCatalogue = new ProductCatalogue("MEN_FASHION", "FASHION", CatalogueType.FASHION,
+                Timestamp.valueOf(LocalDateTime.now()), Timestamp.valueOf(LocalDateTime.now()), null);
+        ProductCatalogue createdProductCatalogue = productCatalogueService.create(productCatalogue);
+
+        // Then
+        assertEquals("MEN_FASHION", createdProductCatalogue.getCode());
+        assertEquals(CatalogueType.FASHION, createdProductCatalogue.getCatalogueType());
+    }
+
+    @Test
+    public void whenFindAll_thenReturnAll() {
+        // When
+        List<ProductCatalogue> productCatalogues = productCatalogueService.findAll();
+
+        // Then
+        assertEquals(1, productCatalogues.size());
+    }
+```
+
+
+
+### Code implementation
+
+#### Filter API
+
+Following code structure, we have ```controllers``` to manage expose Rest API to APIGW, ```repositories``` to manage query data base, ```services``` to do business logic and ```entities``` to mapping database table.
+
+With filter API, we will use Dynamic query in Spring called ```Specification```.
+
+```java
+@Override
+    public Specification<Product> build(ProductQuery request) {
+        return (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if(request.getCategoryCode() != null) {
+                predicates.add(criteriaBuilder.equal(root.get("productCatalogue").get("code"), request.getCategoryCode()));
+            }
+
+            if(request.getBrandCode() != null) {
+                predicates.add(criteriaBuilder.equal(root.get("brand").get("code"), request.getBrandCode()));
+            }
+
+            if(request.getColor() != null && !request.getColor().isEmpty()) {
+                predicates.add(criteriaBuilder.equal(root.get("color"), Color.valueOf(request.getColor()).ordinal()));
+            }
+
+            if(request.getPriceMin() != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("price"), request.getPriceMin()));
+            }
+
+            if(request.getPriceMax() != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("price"), request.getPriceMax()));
+            }
+
+            query.orderBy(criteriaBuilder.desc(root.get("updatedAt")));
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+```
+
+Because filter can be combination of product catalogue, brand, color, prince min, price max and in the future, maybe filter by more criteria, using ```Specification``` make us easy to control and extend code (not modify - Open to extension, Close to modification)
+
+#### API get product detail
+
+This API is quite easy, we will find in cache first, and if in cache don't have, we will query from database.
 
