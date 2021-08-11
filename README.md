@@ -327,7 +327,7 @@ It's work!
 
 API gateway source code: [APIGW](https://github.com/Project-nab/gateway-service.git)
 
-#### Basic setup
+### Basic setup
 
 Now, we already have Discovery service and Configuration service, we will use this two service to config and deploy APIGW service, following our microservice architecture. API GW will start, loading config from Configuration service, and Connect to Discovery service. 
 
@@ -405,7 +405,7 @@ management.endpoints.web.exposure.include=*
 
 This is some basic config for gateway can bootstrap, Gateway-service will read configuration in bootstrap.properties, and load configuration from configuration service http://localhost:8001 (which we config above), with name gateway-service, profile development, and branch on git is master.
 
-#### Secure APIGW
+### Secure APIGW
 
 As we mention in [Microservice design](https://github.com/Project-nab/discovery-service#microservice-design), our resources have to secure, and our microservice have to know who is calling (Because stateless), to identify who is calling ```product service``` and ```cart-service``` is same person or not. We will config our APIGW to authentication server connect to [okta](https://developer.okta.com/) to authenticate request.
 
@@ -416,7 +416,9 @@ To secure APIGW and connect to okta service, we need to add more some dependenci
 * ```cloud-security```: Will help us to config secure apigw
 * ```okta-spring-boot-starter```: Will help us to connect to okta service.
 
-To do this, we will create an application on okta called NAB. Get clientID, clientSeret and add to our configuration of APIGW.
+To do this, we will create an application on okta called ICOMERCE. Get clientID, clientSeret ![OKTA](https://github.com/Project-nab/discovery-service/blob/master/media/OKTA.PNG?raw=true)
+
+Copy Client ID, Client secret and paste to our configuration repo.
 
 ```properties
 okta.oauth2.issuer=https://dev-56264046.okta.com/oauth2/default
@@ -439,7 +441,7 @@ We also need to add some config in our gateway to make sure that all request (ex
     }
 ```
 
-#### Testing
+### Testing
 
 Because now, we don't have any upstream service to routing, so let create a sample request
 
@@ -547,6 +549,48 @@ Like other Spring boot, Spring cloud application, we have to add some main depen
 
 ```starter-sleuth``` and ```starter-sleuth-zipkin``` for distributed tracing log
 
+```spring-cloud-security``` and ```okta-spring-boot-starter``` for secure API and identity user.
+
+### Configuration
+
+We need to add some configuration to product service before going to implement code. Config will be storage centralize at config-repo.
+
+```properties
+server.port=8003
+server.servlet.context-path=/product-service/v1
+
+#H2 config
+spring.h2.console.enabled=true
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=product
+spring.datasource.password=password
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto = create
+
+spring.application.name=product-service
+eureka.client.service-url.defaultZone=http://localhost:8000/eureka/
+
+logging.level.org.springframework.web.filter.CommonsRequestLoggingFilter=DEBUG
+logging.level.org.springframework.web.servlet.DispatcherServlet=TRACE
+
+# Redis cache
+spring.redis.host=localhost
+spring.redis.port=6379
+
+# Zipkin log
+spring.zipkin.baseUrl=http://localhost:9411/
+
+okta.oauth2.issuer=https://dev-56264046.okta.com/oauth2/default
+```
+
+Some main point here
+
+* eureka.client.service-url.defaultZone: config to connect to our Discovery service
+* spring.redis.host and spring.redis.port: config to connect to Redis server. Which will storage cache.
+* spring.zipkin.baseUrl: config to send log tracing to zipkin
+* okta.oauth2.issuer: config to connect to our okta service for identity user.
+
 ### Unit test
 
 Before we go to write code implementation, let write some unit test first (Don't afraid errors). After that, we will implement code to pass all the test case. All unit test is allocated at ```src/test/java/com/icomerce/shopping/product/services/impl```
@@ -645,6 +689,9 @@ We also write test case for brand service test.
         // Then
         assertEquals(1, brands.size());
     }
+	...
+    // More test case here
+    ...
 ```
 
 
@@ -674,6 +721,9 @@ And Product catalogue service test
         // Then
         assertEquals(1, productCatalogues.size());
     }
+	...
+    // More test case here
+    ...
 ```
 
 
@@ -766,10 +816,11 @@ insert into product(product_code, color, price, product_name, quantity, brand_co
 
 Now let build, run unit test and ```curl``` some API from APIGW (APIGW listen on port 8002) to see the result
 
-API filter product list
+API filter product list (Don't forget to add Authorization header because we are calling via APIGW, we can get token by hit http://localhost:8002/greeting and login with username baonc93@gmail.com and password Abc13579)
 
 ```bash
-curl localhost:8002/product-service/v1/products?categoryCode=ADIDAS_01
+curl --location --request GET 'localhost:8002/product-service/v1/products?categoryCode=ADIDAS_01' \
+--header 'Authorization: Bearer eyJraWQiOiJJVlBFNDR2ZVN0dFZQM0J3SUdVM1ZwWmxWbm9Lc3I1Wkl2TTFsVUZQN3QwIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULnhMUkNrRnBLR0FGUlVkNU5oTFdSMDZ1SThQcXRwLXp1WnJLa0pmaFBuRmsiLCJpc3MiOiJodHRwczovL2Rldi01NjI2NDA0Ni5va3RhLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE2Mjg2OTg1NjIsImV4cCI6MTYyODcwMjE2MiwiY2lkIjoiMG9hMWZ5eHkyYVJMMVVONUw1ZDciLCJ1aWQiOiIwMHUxZzE2ejNiSU1OS2pxSTVkNyIsInNjcCI6WyJlbWFpbCIsIm9wZW5pZCIsInBob25lIiwiYWRkcmVzcyIsInByb2ZpbGUiXSwic3ViIjoiYmFvbmM5M0BnbWFpbC5jb20ifQ.VEGCTiwVBlaoMeGmF0Ap__WsD9nvwp__v4eah4wS2K-xgb-zBHaeS4Y_q_S2bYH6Cx0Vv3kG_QzXc6mViJJaXnAykElYbHv7OgQzM9z23wsvqb1BXXzskMdfCPQ58XYFJrHI9O2m4YysVpJNhN-ke5Emi_Xzh8FTNckDjZoh84t_ponctLfT1zU7FmxpbzctS47FyaFTyzy9dq16lp7pEF49WRjwlitS63F0c4yi0PF7PM-rOWpFxBl-O0RPjxocsaiBwCT9gAMvFem4V8QNBJO9yCoPVN6FE4BKpeWfB9E8bUCLo-BLsxmY7z-d9g2bx3TB4YVMyo8fWMzhBKX4lg' \
 ```
 
 Response
@@ -820,7 +871,8 @@ Response
 API get product detail
 
 ```bash
-curl localhost:8002/product-service/v1/products/ADIDAS_TSHIRT_01
+curl --location --request GET 'localhost:8002/product-service/v1/products/ADIDAS_TSHIRT_01' \
+--header 'Authorization: Bearer eyJraWQiOiJJVlBFNDR2ZVN0dFZQM0J3SUdVM1ZwWmxWbm9Lc3I1Wkl2TTFsVUZQN3QwIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULnhMUkNrRnBLR0FGUlVkNU5oTFdSMDZ1SThQcXRwLXp1WnJLa0pmaFBuRmsiLCJpc3MiOiJodHRwczovL2Rldi01NjI2NDA0Ni5va3RhLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE2Mjg2OTg1NjIsImV4cCI6MTYyODcwMjE2MiwiY2lkIjoiMG9hMWZ5eHkyYVJMMVVONUw1ZDciLCJ1aWQiOiIwMHUxZzE2ejNiSU1OS2pxSTVkNyIsInNjcCI6WyJlbWFpbCIsIm9wZW5pZCIsInBob25lIiwiYWRkcmVzcyIsInByb2ZpbGUiXSwic3ViIjoiYmFvbmM5M0BnbWFpbC5jb20ifQ.VEGCTiwVBlaoMeGmF0Ap__WsD9nvwp__v4eah4wS2K-xgb-zBHaeS4Y_q_S2bYH6Cx0Vv3kG_QzXc6mViJJaXnAykElYbHv7OgQzM9z23wsvqb1BXXzskMdfCPQ58XYFJrHI9O2m4YysVpJNhN-ke5Emi_Xzh8FTNckDjZoh84t_ponctLfT1zU7FmxpbzctS47FyaFTyzy9dq16lp7pEF49WRjwlitS63F0c4yi0PF7PM-rOWpFxBl-O0RPjxocsaiBwCT9gAMvFem4V8QNBJO9yCoPVN6FE4BKpeWfB9E8bUCLo-BLsxmY7z-d9g2bx3TB4YVMyo8fWMzhBKX4lg' \
 ```
 
 Response
