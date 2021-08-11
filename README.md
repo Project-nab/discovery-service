@@ -1,5 +1,38 @@
 # NAB PROJECT 
 
+- [NAB PROJECT](#nab-project)
+  * [Problem statement](#problem-statement)
+  * [Highlight](#highlight)
+  * [Project analysis](#project-analysis)
+  * [Technical stacks](#technical-stacks)
+  * [Microservice design](#microservice-design)
+    + [Description](#description)
+  * [Discovery service](#discovery-service)
+  * [Configuration service](#configuration-service)
+  * [API gateway](#api-gateway)
+    + [Basic setup](#basic-setup)
+    + [Secure APIGW](#secure-apigw)
+    + [Testing](#testing)
+  * [Distributed tracing](#distributed-tracing)
+  * [Product-service](#product-service)
+    + [Analysis](#analysis)
+    + [Database design](#database-design)
+      - [ER  Diagram](#er--diagram)
+      - [Database diagram](#database-diagram)
+    + [Code structure](#code-structure)
+    + [Dependencies](#dependencies)
+    + [Configuration](#configuration)
+    + [Unit test](#unit-test)
+      - [Product service test](#product-service-test)
+      - [Brand service test](#brand-service-test)
+      - [Product catalogue service test](#product-catalogue-service-test)
+    + [Code implementation](#code-implementation)
+      - [Filter API](#filter-api)
+      - [API get product detail](#api-get-product-detail)
+    + [Data preparation](#data-preparation)
+    + [Config to APIGW](#config-to-apigw)
+    + [Curl](#curl)
+
 ## Problem statement
 A small start-up named "iCommerce" wants to build a very simple shopping application to sell their
 products. In order to get to the market quickly, they just want to build an MVP version with very 
@@ -810,6 +843,18 @@ insert into product_catalogue(catalogue_code, catalogue_name, catalogue_type) va
 -- insert some data to product table
 insert into product(product_code, color, price, product_name, quantity, brand_code, product_catalogue_code) values
 ('ADIDAS_TSHIRT_01', 0, 50, 'T-shirt', 100, 'ADIDAS', 'ADIDAS_01');
+```
+
+### Config to APIGW
+
+Now we already finished our code implementation for product service, let config it on APIGW by
+
+```properties
+# Product service routing
+spring.cloud.gateway.routes[1].id=product-service
+spring.cloud.gateway.routes[1].uri=lb://PRODUCT-SERVICE
+spring.cloud.gateway.routes[1].predicates[0].name=Path
+spring.cloud.gateway.routes[1].predicates[0].args[pattern]=/product-service/v1/**
 ```
 
 ### Curl
