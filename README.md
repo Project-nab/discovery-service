@@ -424,7 +424,7 @@ okta.oauth2.client-id=0oa1fyxy2aRL1UN5L5d7
 okta.oauth2.client-secret=zhNvsAOA0oOVKEekTkEucGjh1KxnVsIO9VN8TtxO
 ```
 
-We also need to add some config in our gateway to make sure that all request (exchange) have au authenticated.
+We also need to add some config in our gateway to make sure that all request (exchange) have authenticated.
 
 ```java
     @Bean
@@ -439,7 +439,38 @@ We also need to add some config in our gateway to make sure that all request (ex
     }
 ```
 
+#### Testing
 
+Because now, we don't have any upstream service to routing, so let create a sample request
+
+```java
+    @RequestMapping("/greeting")
+    public String greeting(@AuthenticationPrincipal OidcUser oidcUser,
+                           Model model,
+                           @RegisteredOAuth2AuthorizedClient("okta")OAuth2AuthorizedClient client) {
+        model.addAttribute("username", oidcUser.getEmail());
+        model.addAttribute("idToken", oidcUser.getIdToken());
+        model.addAttribute("accessToken", client.getAccessToken());
+
+        return "greeting";
+    }
+```
+
+When user hit ```/greeting``` it will redirect to login page of okta, user will login and we return username, IdToken and accessToken. After that, client (web app) will use ```accessToken``` in Authorization header to access our resources.
+
+Now, let buid, run unit test and open browser to url
+
+```bash
+http://localhost:8002/greeting
+```
+
+And we will see login page
+
+![LoginPage](https://github.com/Project-nab/discovery-service/blob/master/media/LoginPage.PNG?raw=true)
+
+Login with username is: ```baonc93@gmail.com``` and password is: ```Abc13579```, and we will have username, Idtoken and accessToken
+
+![Afterlogin](https://github.com/Project-nab/discovery-service/blob/master/media/AfterLoginGateway.PNG?raw=true)
 
 ## Distributed tracing
 
