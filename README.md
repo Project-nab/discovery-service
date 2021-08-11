@@ -58,7 +58,7 @@ For Frontend we use AngularJS, it's the one of the most javascript framework use
 
 ## Microservice design
 
-![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/DeploymentDiagramV3.png?raw=true)
+![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/Deployment%20DiagramV4.png?raw=true)
 
 ### Description
 
@@ -69,6 +69,7 @@ For Frontend we use AngularJS, it's the one of the most javascript framework use
 
 * Further more, we will have three basic module when we deploy on cloud is:
   * APIGW: This module will take care routing to upstream service when have request from web page.
+  * Authentication Server: Our three service ```product-service```, ```cart-service```, ```order-service``` is resources service, and we have to protected it by authentication and authorization. In this project, we will use [okta](https://developer.okta.com/) to manage user and secure APIGW. Every request have to pass ```Bearer token``` to access our resources. Also, our microservice is state less, we need to know who is calling ```product-service``` and who is calling ```cart-service``` is same person. With, secure to identity user, will help to archive this both goals.
   * Config service: This service responsibility is manage configuration of all microservice.
   * Discovery service: This service responsibility is mange all three microservice (Order service, cart service, product service). Its will enable client side load-balancing and decouples service providers from consumers. We will use spring-cloud-starter-netflix-eureka-server for this part.
   * Distributed tracing: This service will manage all of our microservice logging. In microservice, a service have to communicate with the others service, so we need logging to tracing and monitoring it. We will use ```starter-sleuth``` and ```sleuth-zipkin``` to archive it.
@@ -326,6 +327,8 @@ It's work!
 
 API gateway source code: [APIGW](https://github.com/Project-nab/gateway-service.git)
 
+#### Basic setup
+
 Now, we already have Discovery service and Configuration service, we will use this two service to config and deploy APIGW service, following our microservice architecture. API GW will start, loading config from Configuration service, and Connect to Discovery service. 
 
 To create an Spring cloud APIGW and connect to Discovery service and Configuration service, we have to add three main dependencies
@@ -402,51 +405,41 @@ management.endpoints.web.exposure.include=*
 
 This is some basic config for gateway can bootstrap, Gateway-service will read configuration in bootstrap.properties, and load configuration from configuration service http://localhost:8001 (which we config above), with name gateway-service, profile development, and branch on git is master.
 
-Let build and start gateway-service and make some testing.
+#### Secure APIGW
 
-We will curl to gateway-service configuration via APIGW we have just started.
+As we mention in [Microservice design](https://github.com/Project-nab/discovery-service#microservice-design), our resources have to secure, and our microservice have to know who is calling (Because stateless), to identify who is calling ```product service``` and ```cart-service``` is same person or not. We will config our APIGW to authentication server connect to [okta](https://developer.okta.com/) to authenticate request.
 
-```bash
-curl baonc:password@localhost:8002/gateway-service/development
+Dependencies
+
+To secure APIGW and connect to okta service, we need to add more some dependencies
+
+* ```cloud-security```: Will help us to config secure apigw
+* ```okta-spring-boot-starter```: Will help us to connect to okta service.
+
+To do this, we will create an application on okta called NAB. Get clientID, clientSeret and add to our configuration of APIGW.
+
+```properties
+okta.oauth2.issuer=https://dev-56264046.okta.com/oauth2/default
+okta.oauth2.client-id=0oa1fyxy2aRL1UN5L5d7
+okta.oauth2.client-secret=zhNvsAOA0oOVKEekTkEucGjh1KxnVsIO9VN8TtxO
 ```
 
-At this part, we can see:
+We also need to add some config in our gateway to make sure that all request (exchange) have au authenticated.
 
-* localhost:8002 is domain and port of API gateway, which we config [here](https://github.com/Project-nab/config-repo/blob/master/gateway-service.properties)
-* gateway-service: is predicates path
-* development: is config profile.
-
-And we will get return
-
-```json
-{
-  "name": "gateway-service",
-  "profiles": [
-    "development"
-  ],
-  "label": null,
-  "version": "0557f90ee7f41353275997720e8ac56880f9cc24",
-  "state": null,
-  "propertySources": [
-    {
-      "name": "https://github.com/Project-nab/config-repo.git/gateway-service.properties",
-      "source": {
-        "server.port": "8002",
-        "spring.application.name": "gateway-service",
-        "eureka.client.service-url.defaultZone": "http://localhost:8000/eureka/",
-        "spring.cloud.gateway.routes[0].id": "configuration",
-        "spring.cloud.gateway.routes[0].uri": "lb://CONFIGURATION-SERVICE",
-        "spring.cloud.gateway.routes[0].predicates[0].name": "Path",
-        "spring.cloud.gateway.routes[0].predicates[0].args[pattern]": "/gateway-service/**"
-      }
+```java
+    @Bean
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+        http.csrf().disable()
+                .authorizeExchange()
+                .anyExchange()
+                .authenticated()
+                .and().oauth2Login()
+                .and().oauth2ResourceServer().jwt();
+        return http.build();
     }
-  ]
-}
 ```
 
-As we can see, its configuration of gateway service, we get it via APIGW, APIGW routing to configuration service, and return it back.
 
-Following our microservice architecture, we already have three basic service (Discovery service, Config service and APIGW service). Let move on to our three remaining business service (product-service, cart-service, order-service)
 
 ## Distributed tracing
 
