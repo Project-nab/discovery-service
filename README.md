@@ -527,6 +527,8 @@ Open ```localhost:9411``` and we will see the log tracing
 
 ### Analysis
 
+Product service is service will mange all of the product information like product catalogue, brand, product attribute...
+
 In this sprint, and following detail task we already defined at [Project analysis](https://github.com/Project-nab/discovery-service#project-analysis), In product service, we have to implement following API.
 
 * API filter product base on criteria.
@@ -938,4 +940,23 @@ Response
     }
 }
 ```
+
+## Cart-service
+
+### Analysis
+
+Cart service manage all information related to shopping cart of customer. Every time customer add an item, client will consume ``cart-service``, a cart will be created and item will be added in this cart.\
+
+### Database design
+
+#### ER Diagram
+
+![cart-service-erd](https://github.com/Project-nab/discovery-service/blob/master/media/ERD-CART.png?raw=true)
+
+Cart service will have two main entity:
+
+* cart: this entity will save customer's cart information like username, sessionid, status
+* cartItems: each cart will have zero or many cart items. This entity will storage item information (like product code, quantity...)
+
+#### Database diagram
 
