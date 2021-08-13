@@ -53,6 +53,7 @@ Before we go detail, this is some highlight noted:
 5. Be sure that your local has been installed ```redis``` for caching, and rate-limit gateway purpose.
 6. Be sure that your local have ```Zipkin``` for log tracing.
 7. Product service listen on port 8003, and source code at: [Product service](https://github.com/Project-nab/product-service.git)
+8. Cart service listen on port 8004, and source code at: [Cart service](https://github.com/Project-nab/cart-service.git)
 
 ## Project analysis
 
@@ -588,6 +589,20 @@ Like other Spring boot, Spring cloud application, we have to add some main depen
 
 ### Configuration
 
+Because our microservices is in private zone, following microservice design, so we can permit all request internal in security configuration (For us can easy to communicate between microservices)
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+    public void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests().anyRequest().permitAll();
+    }
+}
+```
+
+With this configuration, all request internal between microservice no need to authenticated, but, every request from APIGW is authenticated because we already set APIGW security.
+
 We need to add some configuration to product service before going to implement code. Config will be storage centralize at config-repo.
 
 ```properties
@@ -624,7 +639,7 @@ Some main point here
 * eureka.client.service-url.defaultZone: config to connect to our Discovery service
 * spring.redis.host and spring.redis.port: config to connect to Redis server. Which will storage cache.
 * spring.zipkin.baseUrl: config to send log tracing to zipkin
-* okta.oauth2.issuer: config to connect to our okta service for identity user.
+* okta.oauth2.issuer: config to connect to our okta service for identity user. We will use bearer token to identity user.
 
 ### Unit test
 
@@ -959,4 +974,320 @@ Cart service will have two main entity:
 * cartItems: each cart will have zero or many cart items. This entity will storage item information (like product code, quantity...)
 
 #### Database diagram
+
+![cart-db](https://github.com/Project-nab/discovery-service/blob/master/media/CART-DB.png?raw=true)
+
+Here, we will use session id of user as cart id. Every time user login, and shopping in a session, this will be a customer's cart.
+
+### Code structure
+
+We will use same code structure like [product-service-code-structure](https://github.com/Project-nab/discovery-service#code-structure)
+
+### Dependencies
+
+We will use same dependencies like [product-service-dependencies](https://github.com/Project-nab/discovery-service#dependencies)
+
+### Configuration
+
+We disabled security config like ```product-service```
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+    public void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests().anyRequest().permitAll();
+    }
+}
+```
+
+ 
+
+Similar with Product-service. We need to add some configuration
+
+```java
+server.port=8004
+server.servlet.context-path=/cart-service/v1
+
+#H2 config
+spring.h2.console.enabled=true
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=cart
+spring.datasource.password=password
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto = create
+
+spring.application.name=cart-service
+eureka.client.service-url.defaultZone=http://localhost:8000/eureka/
+
+logging.level.org.springframework.web.filter.CommonsRequestLoggingFilter=DEBUG
+logging.level.org.springframework.web.servlet.DispatcherServlet=TRACE
+
+# Redis cache
+spring.redis.host=localhost
+spring.redis.port=6379
+
+# Zipkin log
+spring.zipkin.baseUrl=http://localhost:9411/
+
+okta.oauth2.issuer=https://dev-56264046.okta.com/oauth2/default
+```
+
+Here, cart service listen on port 8004.
+
+### Unit test
+
+Some unit test before implement code detail, all unit test located at: ```src/test/java/com/icomerce/shopping/cart/services/impl```
+
+#### Cart service test
+
+Bellow is some test case for cart service
+
+```java
+@Test
+    public void whenCreateCard_thenReturnCart() throws InvalidQuantityException, ProductCodeNotFoundException,
+            QuantityOverException {
+        // When
+        cartService.addCart("baonc93@gmail.com", "4EF9C11DD7E95AEA3505D0BF17F23DAC",
+                "ADIDAS_TSHIRT_01", 1);
+        // Then
+        assertEquals(1, cartRepo.count());
+    }
+
+    @Test(expected = QuantityOverException.class)
+    public void whenCreateCartQuantityGreaterThanProductQuantity_thenThrowException() throws InvalidQuantityException,
+            ProductCodeNotFoundException, QuantityOverException {
+        cartService.addCart("baonc93@gmail.com", "4EF9C11DD7E95AEA3505D0BF17F23DAC",
+                "ADIDAS_TSHIRT_01", 20000);
+    }
+
+    @Test(expected = InvalidQuantityException.class)
+    public void whenCreateCartQuantityLessThanOrEqualZero_thenThrowException() throws InvalidQuantityException,
+            ProductCodeNotFoundException, QuantityOverException {
+        cartService.addCart("baonc93@gmail.com", "4EF9C11DD7E95AEA3505D0BF17F23DAC",
+                "ADIDAS_TSHIRT_01", 0);
+    }
+	...
+    // More test case here
+ 	...
+```
+
+#### Cart item service test
+
+```java
+@Test
+    public void whenAddCard_thenReturnItem() throws InvalidQuantityException,
+            ProductCodeNotFoundException, QuantityOverException {
+        // When
+        cartService.addCart("baonc93@gmail.com", "4EF9C11DD7E95AEA3505D0BF17F23DAC",
+                "ADIDAS_TSHIRT_01", 1);
+        Page<CartItem> cartItems = cartItemService.findAllByCartSessionId("4EF9C11DD7E95AEA3505D0BF17F23DAC",
+                0, 10);
+        // Then
+        assertEquals(1, cartItems.getTotalElements());
+    }
+```
+
+### Code implementation
+
+#### Add cart API
+
+In add cart API, we have to consume to ```product-service``` to check product detail before add product to shopping cart. Here, we will using ```FeignClient``` in Sping cloud, ```FeignClient``` will support us in load-balancing and do the rest API.
+
+```java
+@FeignClient(value = "product-service")
+public interface ProductClient {
+    @RequestMapping(method = RequestMethod.GET, value = "/product-service/v1/products/{productCode}")
+    ProductClientResponse getProductByCode(@PathVariable(value = "productCode") String productCode);
+}
+```
+
+Because we consume internal not through APIGW, so no need to add ```Bearer token``` here.
+
+To know who is adding an item to shopping cart, we will use ```bearer token``` authentication following
+
+```java
+@RequestMapping(value = "/carts", method = RequestMethod.POST)
+    public BaseResponse createCart(@RequestBody CreateCartRequest request,
+                                   HttpSession session,
+                                   Principal principal) {
+        String username = principal.getName();
+        String sessionId = session.getId();
+        BaseResponse responseBody;
+        try {
+            Cart cart = cartService.addCart(username, sessionId, request.getProductCode(), request.getQuantity());
+            responseBody = new BaseResponse(HttpServletResponse.SC_CREATED, "Add cart successful", cart);
+        } catch (QuantityOverException e) {
+            log.error("Quantity over exception ", e);
+            responseBody = new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, "Quantity is over", null);
+        } catch (ProductCodeNotFoundException e) {
+            log.error("Product code not found exception ", e);
+            responseBody = new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, "Invalid product code", null);
+        } catch (InvalidQuantityException e) {
+            log.error("Invalid quantity exception ", e);
+            responseBody = new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, "Quantity have to greater than 0", null);
+        }
+        return responseBody;
+    }
+```
+
+We inject ```Principal``` to get username who is calling our API and ```HttpSession``` to get user session (Spring boot beautiful)
+
+Config to APIGW
+
+Let config cart-service to our APIGW config repo.
+
+```properties
+# cart service routing
+spring.cloud.gateway.routes[2].id=cart-service
+spring.cloud.gateway.routes[2].uri=lb://CART-SERVICE
+spring.cloud.gateway.routes[2].predicates[0].name=Path
+spring.cloud.gateway.routes[2].predicates[0].args[pattern]=/cart-service/v1/**
+```
+
+### Curl
+
+Now let try to curl our API via APIGW
+
+API add a product to shopping cart. Don't forget to add our Bearer token.
+
+```bash
+curl --location --request POST 'localhost:8002/cart-service/v1/carts' \
+--header 'Authorization: Bearer eyJraWQiOiJJVlBFNDR2ZVN0dFZQM0J3SUdVM1ZwWmxWbm9Lc3I1Wkl2TTFsVUZQN3QwIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULm1wZTVMdHFtS0o0bE92MlZKWUJnQ0FWOUVHODF2ejdUQUw5b2h5aEZFeVkiLCJpc3MiOiJodHRwczovL2Rldi01NjI2NDA0Ni5va3RhLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE2Mjg4NzY3MzYsImV4cCI6MTYyODg4MDMzNiwiY2lkIjoiMG9hMWZ5eHkyYVJMMVVONUw1ZDciLCJ1aWQiOiIwMHUxZzE2ejNiSU1OS2pxSTVkNyIsInNjcCI6WyJhZGRyZXNzIiwib3BlbmlkIiwicGhvbmUiLCJwcm9maWxlIiwiZW1haWwiXSwic3ViIjoiYmFvbmM5M0BnbWFpbC5jb20ifQ.K0tXaMtaBo3d6W2bRMjMDl0JkZlc8olaCDVdCNNNoD58fm92T2FICIUsh78WNq0PUH_4xty5fa01TQhnWKF5j2sAjFNI0-83EZodcLv3-nAymkAjGzoSffgMATtxC8F4lduqHmkuDRDoj5n-3VZAX29KWLAaZSqiB8WeoJVFWoxBujD4MhQF0BdXLDm5Fi62uKyyihDxNxcXntzx0J5j5NLXaVhb1ff4CedojlMAihHlcpcYcxQP3gvR_ikF1VzfPnUn3Blzt9ip3onkqUgT4Ye2Yeg-jDd3jxwZZAMhtK6pDrUtTUeJK9MDYFSUytx-JmVHu5XDADdYA5KjNMf8AQ' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "productCode": "ADIDAS_TSHIRT_01",
+    "quantity": 1
+}'
+```
+
+Response
+
+```json
+{
+    "errorCode": 201,
+    "message": "Add cart successful",
+    "result": {
+        "sessionId": "9A30AB18A548A0C6A4F21AD4DC80397D",
+        "username": "baonc93@gmail.com",
+        "createdAt": "2021-08-13T17:48:15.568+00:00",
+        "updatedAt": "2021-08-13T17:48:15.568+00:00",
+        "cartStatus": "NEW"
+    }
+}
+```
+
+API get all cart of a user
+
+```bash
+curl --location --request GET 'localhost:8002/cart-service/v1/carts' \
+--header 'Authorization: Bearer eyJraWQiOiJJVlBFNDR2ZVN0dFZQM0J3SUdVM1ZwWmxWbm9Lc3I1Wkl2TTFsVUZQN3QwIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULm1wZTVMdHFtS0o0bE92MlZKWUJnQ0FWOUVHODF2ejdUQUw5b2h5aEZFeVkiLCJpc3MiOiJodHRwczovL2Rldi01NjI2NDA0Ni5va3RhLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE2Mjg4NzY3MzYsImV4cCI6MTYyODg4MDMzNiwiY2lkIjoiMG9hMWZ5eHkyYVJMMVVONUw1ZDciLCJ1aWQiOiIwMHUxZzE2ejNiSU1OS2pxSTVkNyIsInNjcCI6WyJhZGRyZXNzIiwib3BlbmlkIiwicGhvbmUiLCJwcm9maWxlIiwiZW1haWwiXSwic3ViIjoiYmFvbmM5M0BnbWFpbC5jb20ifQ.K0tXaMtaBo3d6W2bRMjMDl0JkZlc8olaCDVdCNNNoD58fm92T2FICIUsh78WNq0PUH_4xty5fa01TQhnWKF5j2sAjFNI0-83EZodcLv3-nAymkAjGzoSffgMATtxC8F4lduqHmkuDRDoj5n-3VZAX29KWLAaZSqiB8WeoJVFWoxBujD4MhQF0BdXLDm5Fi62uKyyihDxNxcXntzx0J5j5NLXaVhb1ff4CedojlMAihHlcpcYcxQP3gvR_ikF1VzfPnUn3Blzt9ip3onkqUgT4Ye2Yeg-jDd3jxwZZAMhtK6pDrUtTUeJK9MDYFSUytx-JmVHu5XDADdYA5KjNMf8AQ' \
+--header 'Content-Type: application/json' \
+```
+
+Response
+
+```json
+{
+    "errorCode": 200,
+    "message": "Success",
+    "result": {
+        "content": [
+            {
+                "sessionId": "9A30AB18A548A0C6A4F21AD4DC80397D",
+                "username": "baonc93@gmail.com",
+                "createdAt": "2021-08-13T17:48:15.568+00:00",
+                "updatedAt": "2021-08-13T17:48:15.568+00:00",
+                "cartStatus": "NEW"
+            },
+            {
+                "sessionId": "AE412C06989FDDF2ACD04C24F2C0B1C9",
+                "username": "baonc93@gmail.com",
+                "createdAt": "2021-08-13T17:49:54.452+00:00",
+                "updatedAt": "2021-08-13T17:49:54.452+00:00",
+                "cartStatus": "NEW"
+            }
+        ],
+        "pageable": {
+            "sort": {
+                "sorted": false,
+                "unsorted": true,
+                "empty": true
+            },
+            "offset": 0,
+            "pageSize": 10,
+            "pageNumber": 0,
+            "paged": true,
+            "unpaged": false
+        },
+        "last": true,
+        "totalElements": 2,
+        "totalPages": 1,
+        "size": 10,
+        "number": 0,
+        "sort": {
+            "sorted": false,
+            "unsorted": true,
+            "empty": true
+        },
+        "numberOfElements": 2,
+        "first": true,
+        "empty": false
+    }
+}
+```
+
+API to get Product list of a cart
+
+```bash
+curl --location --request GET 'localhost:8002/cart-service/v1/carts/AE412C06989FDDF2ACD04C24F2C0B1C9/items' \
+--header 'Authorization: Bearer eyJraWQiOiJJVlBFNDR2ZVN0dFZQM0J3SUdVM1ZwWmxWbm9Lc3I1Wkl2TTFsVUZQN3QwIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULm1wZTVMdHFtS0o0bE92MlZKWUJnQ0FWOUVHODF2ejdUQUw5b2h5aEZFeVkiLCJpc3MiOiJodHRwczovL2Rldi01NjI2NDA0Ni5va3RhLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE2Mjg4NzY3MzYsImV4cCI6MTYyODg4MDMzNiwiY2lkIjoiMG9hMWZ5eHkyYVJMMVVONUw1ZDciLCJ1aWQiOiIwMHUxZzE2ejNiSU1OS2pxSTVkNyIsInNjcCI6WyJhZGRyZXNzIiwib3BlbmlkIiwicGhvbmUiLCJwcm9maWxlIiwiZW1haWwiXSwic3ViIjoiYmFvbmM5M0BnbWFpbC5jb20ifQ.K0tXaMtaBo3d6W2bRMjMDl0JkZlc8olaCDVdCNNNoD58fm92T2FICIUsh78WNq0PUH_4xty5fa01TQhnWKF5j2sAjFNI0-83EZodcLv3-nAymkAjGzoSffgMATtxC8F4lduqHmkuDRDoj5n-3VZAX29KWLAaZSqiB8WeoJVFWoxBujD4MhQF0BdXLDm5Fi62uKyyihDxNxcXntzx0J5j5NLXaVhb1ff4CedojlMAihHlcpcYcxQP3gvR_ikF1VzfPnUn3Blzt9ip3onkqUgT4Ye2Yeg-jDd3jxwZZAMhtK6pDrUtTUeJK9MDYFSUytx-JmVHu5XDADdYA5KjNMf8AQ' \
+--header 'Content-Type: application/json' \
+```
+
+Response
+
+```json
+{
+    "errorCode": 200,
+    "message": "Success",
+    "result": {
+        "content": [
+            {
+                "id": 2,
+                "productCode": "ADIDAS_TSHIRT_01",
+                "quantity": 1,
+                "createdAt": "2021-08-13T17:49:54.452+00:00",
+                "updatedAt": "2021-08-13T17:49:54.452+00:00"
+            }
+        ],
+        "pageable": {
+            "sort": {
+                "sorted": false,
+                "unsorted": true,
+                "empty": true
+            },
+            "offset": 0,
+            "pageSize": 10,
+            "pageNumber": 0,
+            "paged": true,
+            "unpaged": false
+        },
+        "last": true,
+        "totalElements": 1,
+        "totalPages": 1,
+        "size": 10,
+        "number": 0,
+        "sort": {
+            "sorted": false,
+            "unsorted": true,
+            "empty": true
+        },
+        "numberOfElements": 1,
+        "first": true,
+        "empty": false
+    }
+}
+```
 
