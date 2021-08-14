@@ -531,6 +531,8 @@ Open ```localhost:9411``` and we will see the log tracing
 
 Product service is service will mange all of the product information like product catalogue, brand, product attribute...
 
+
+
 In this sprint, and following detail task we already defined at [Project analysis](https://github.com/Project-nab/discovery-service#project-analysis), In product service, we have to implement following API.
 
 * API filter product base on criteria.
@@ -1088,6 +1090,9 @@ Bellow is some test case for cart service
         // Then
         assertEquals(1, cartItems.getTotalElements());
     }
+	...
+    // More test case here
+    ...
 ```
 
 ### Code implementation
@@ -1310,3 +1315,262 @@ Order service has responsibility when customer place an order. Order service wil
 ![ERD-Order-service](https://github.com/Project-nab/discovery-service/blob/master/media/ERD-ORDER.png?raw=true)
 
 This version just support delivery and customer pay by cash, so we don't included payment service. We just get cart session id and ship to customer. Each order will have each shipment information.
+
+#### Database diagram
+
+![Order-db](https://github.com/Project-nab/discovery-service/blob/master/media/ORDER-DB.png?raw=true)
+
+### Code structure
+
+We will use same code structure like [product-service-code-structure](https://github.com/Project-nab/discovery-service#code-structure)
+
+### Dependencies
+
+We will use same dependencies like [product-service-dependencies](https://github.com/Project-nab/discovery-service#dependencies)
+
+### Configuration
+
+Same as ```product-service``` and ```cart-service``` we config security config to disable authenticated request when request coming from internal
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+    public void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests().anyRequest().permitAll();
+    }
+}
+```
+
+Order service configuration
+
+```properties
+server.port=8005
+server.servlet.context-path=/order-service/v1
+
+#H2 config
+spring.h2.console.enabled=true
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=order
+spring.datasource.password=password
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto = create
+
+spring.application.name=order-service
+eureka.client.service-url.defaultZone=http://localhost:8000/eureka/
+
+logging.level.org.springframework.web.filter.CommonsRequestLoggingFilter=DEBUG
+logging.level.org.springframework.web.servlet.DispatcherServlet=TRACE
+
+# Redis cache
+spring.redis.host=localhost
+spring.redis.port=6379
+
+# Zipkin log
+spring.zipkin.baseUrl=http://localhost:9411/
+
+okta.oauth2.issuer=https://dev-56264046.okta.com/oauth2/default
+```
+
+### Unit test
+
+Some unit test before implement code detail. All unit test located at ```src/test/java/com/icomerce/shopping/order/service/imp```
+
+#### Order service test
+
+```java
+    @Test
+    public void whenCreateAnOrder_thenReturnAnOrder() throws InvalidCartStatusException, InvalidCartException {
+        orderService.createOrder("4EF9C11DD7E95AEA3505D0BF17F23DAC", "baonc93@gmail.com");
+        assertEquals(1, orderRepo.count());
+    }
+
+    @Test(expected = InvalidCartException.class)
+    public void whenCreateAnInvalidCardOrder_throwException() throws InvalidCartStatusException, InvalidCartException {
+        orderService.createOrder("8EF9C11DD7E95AEA3505D0BF17F23DAC", "baonc93@gmail.com");
+    }
+    ...
+    // More test case here
+    ...
+```
+
+#### Shipment service test
+
+```java
+@Test
+    public void whenCreateShipment_thenReturnShipment() throws InvalidCartStatusException, InvalidCartException,
+            UpdateCartStatusException, InvalidOrderIdException, UpdateProductQuantityException {
+        // When
+        Order order = orderService.createOrder("4EF9C11DD7E95AEA3505D0BF17F23DAC", "baonc93@gmail.com");
+        Shipment shipment = shipmentService.createShipment("125 Dong Van Cong stress, District 2, HCM City",
+                "0355961181", order.getId());
+        // Then
+        assertEquals(1, shipmentRepo.count());
+    }
+
+    @Test(expected = InvalidOrderIdException.class)
+    public void whenCreateShipmentWrongOrderId_thenThrowException() throws UpdateCartStatusException,
+            InvalidOrderIdException, UpdateProductQuantityException {
+        // When
+        Shipment shipment = shipmentService.createShipment("125 Dong Van Cong stress, District 2, HCM City",
+                "0355961181", 353523L);
+    }
+
+    @Test
+    public void whenCreateShipment_thenCartStatusChanged() throws InvalidCartStatusException, InvalidCartException,
+            UpdateCartStatusException, InvalidOrderIdException, UpdateProductQuantityException {
+        // When
+        Order order = orderService.createOrder("4EF9C11DD7E95AEA3505D0BF17F23DAC", "baonc93@gmail.com");
+        Shipment shipment = shipmentService.createShipment("125 Dong Van Cong stress, District 2, HCM City",
+                "0355961181", order.getId());
+        // Then
+        CartClientResponse cartClientResponse = cartClient.getCartBySessionId("4EF9C11DD7E95AEA3505D0BF17F23DAC");
+        assertEquals(CartStatus.DELIVERING, cartClientResponse.getResult().getCartStatus());
+    }
+```
+
+### Code implementation
+
+In ```order-service``` we have to consume API from ```product-service``` and ```cart-service```, then we will use ```FeigClient``` to consume these API
+
+CartClient
+
+```java
+@FeignClient(value = "cart-service")
+public interface CartClient {
+    @RequestMapping(method = RequestMethod.GET, value = "/cart-service/v1/carts/{sessionId}")
+    CartClientResponse getCartBySessionId(@PathVariable(value = "sessionId") String sessionId);
+
+    @RequestMapping(method = RequestMethod.PUT, value = "/cart-service/v1/carts/{sessionId}")
+    CartClientResponse updateCart(@PathVariable(value = "sessionId") String sessionId, @RequestBody CartRequest request);
+
+    @RequestMapping(method = RequestMethod.GET, value = "/cart-service/v1/carts/{sessionId}/items")
+    CartItemClientResponse getCartItem(@PathVariable(value = "sessionId") String sessionId);
+}
+```
+
+ProductClient
+
+```java
+@FeignClient(value = "product-service")
+public interface ProductClient {
+    @RequestMapping(method = RequestMethod.PUT, value = "/product-service/v1/products/{productCode}")
+    ProductClientResponse updateProductQuantity(@PathVariable(value = "productCode") String productCode, @RequestBody ProductRequest productRequest);
+
+    @RequestMapping(method = RequestMethod.GET, value = "/product-service/v1/products/{productCode}")
+    ProductClientResponse getProduct(@PathVariable(value = "productCode") String productCode);
+}
+```
+
+
+
+#### API place an order
+
+```java
+    @RequestMapping(value = "/orders", method = RequestMethod.POST)
+    public BaseResponse createOrder(@RequestBody CreateOrderRequest request,
+                                    Principal principal) {
+        String username = principal.getName();
+        Order order = null;
+        try {
+            order = orderService.createOrder(request.getSessionId(), username);
+            return new BaseResponse(HttpServletResponse.SC_CREATED, "Success", order);
+        } catch (InvalidCartException e) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            log.error("Invalid cart exception ", e);
+            return new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, e.getMessage(), order);
+        } catch (InvalidCartStatusException e) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            log.error("Invalid cart status exception ", e);
+            return new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, e.getMessage(), order);
+        }
+    }
+```
+
+We will get username  via ```spring security``` principal and then place an order for user
+
+#### API shipment
+
+```java
+    @RequestMapping(method = RequestMethod.POST, value = "/order/{orderId}/shipment")
+    public BaseResponse createShipment(@PathVariable(value = "orderId") Long orderId,
+                                       @RequestBody ShipmentRequest shipmentRequest) {
+        try {
+            Shipment shipment = shipmentService.createShipment(shipmentRequest.getAddress(), shipmentRequest.getPhoneNumber(),
+                    orderId);
+            return new BaseResponse(HttpServletResponse.SC_CREATED, "Success", shipment);
+        } catch (InvalidOrderIdException e) {
+            log.error("Invalid order id exception ", e);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            return new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, e.getMessage(), null);
+        } catch (UpdateProductQuantityException e) {
+            log.error("Update product quantity exception ", e);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return new BaseResponse(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage(), null);
+        } catch (UpdateCartStatusException e) {
+            log.error("Update cart status exception ", e);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return new BaseResponse(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage(), null);
+        }
+    }
+```
+
+### Curl
+
+Now let try to curl ```order-service``` via APIGW
+
+Place an order API
+
+```bash
+curl --location --request POST 'http://localhost:8002/order-service/v1/orders' \
+--header 'Authorization: Bearer eyJraWQiOiJJVlBFNDR2ZVN0dFZQM0J3SUdVM1ZwWmxWbm9Lc3I1Wkl2TTFsVUZQN3QwIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULkhBMHhPWWZ2clpvZW5sb05jZm9OMUFkS0s0LVZrRDRvZk9ta2FwX25mSU0iLCJpc3MiOiJodHRwczovL2Rldi01NjI2NDA0Ni5va3RhLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE2Mjg5NjUwODUsImV4cCI6MTYyODk2ODY4NSwiY2lkIjoiMG9hMWZ5eHkyYVJMMVVONUw1ZDciLCJ1aWQiOiIwMHUxZzE2ejNiSU1OS2pxSTVkNyIsInNjcCI6WyJvcGVuaWQiLCJwaG9uZSIsInByb2ZpbGUiLCJlbWFpbCIsImFkZHJlc3MiXSwic3ViIjoiYmFvbmM5M0BnbWFpbC5jb20ifQ.dinHj-q6cEQ8owOF9KbSLZxbQniCf7mh9pEtmOmK6PTY2Izl5kj01iLuEkykGcu5j1GqdnIu2cI430Do3i5Fl91y2o-j1pgFqN-Au-apxmQZt2p2rRFDcsHaQlaenqeh8ORc2TlciJMB7wc1v42pYPrydMsNmcAbry4MatwGr04dhhyvURMeltJA8amVOU8b0YRweQrpelUobkrilUN_tVT_lb0ACWtB-K2HKOYTCSPvXhSIZs3LIahnh_kMO84igm4zRai83nK5egyeMWcD_x9tuo3mxd4Au8V6Vg3GAx83muNYioae2uRU7md6q9NyhK6Wqf-mqQ4JqiY-Qzvc_w' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "sessionId": "4EF9C11DD7E95AEA3505D0BF17F23DAC"
+}'
+```
+
+Response
+
+```json
+{
+    "errorCode": 201,
+    "message": "Success",
+    "result": {
+        "id": 1,
+        "shipment": null,
+        "cartSessionId": "4EF9C11DD7E95AEA3505D0BF17F23DAC",
+        "createdAt": "2021-08-14T18:18:22.625+00:00",
+        "updatedAt": "2021-08-14T18:18:22.625+00:00",
+        "status": "NEW"
+    }
+}
+```
+
+Add shipment information API
+
+```bash
+curl --location --request POST 'http://localhost:8002/order-service/v1/orders/1/shipments' \
+--header 'Authorization: Bearer eyJraWQiOiJJVlBFNDR2ZVN0dFZQM0J3SUdVM1ZwWmxWbm9Lc3I1Wkl2TTFsVUZQN3QwIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULkhBMHhPWWZ2clpvZW5sb05jZm9OMUFkS0s0LVZrRDRvZk9ta2FwX25mSU0iLCJpc3MiOiJodHRwczovL2Rldi01NjI2NDA0Ni5va3RhLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE2Mjg5NjUwODUsImV4cCI6MTYyODk2ODY4NSwiY2lkIjoiMG9hMWZ5eHkyYVJMMVVONUw1ZDciLCJ1aWQiOiIwMHUxZzE2ejNiSU1OS2pxSTVkNyIsInNjcCI6WyJvcGVuaWQiLCJwaG9uZSIsInByb2ZpbGUiLCJlbWFpbCIsImFkZHJlc3MiXSwic3ViIjoiYmFvbmM5M0BnbWFpbC5jb20ifQ.dinHj-q6cEQ8owOF9KbSLZxbQniCf7mh9pEtmOmK6PTY2Izl5kj01iLuEkykGcu5j1GqdnIu2cI430Do3i5Fl91y2o-j1pgFqN-Au-apxmQZt2p2rRFDcsHaQlaenqeh8ORc2TlciJMB7wc1v42pYPrydMsNmcAbry4MatwGr04dhhyvURMeltJA8amVOU8b0YRweQrpelUobkrilUN_tVT_lb0ACWtB-K2HKOYTCSPvXhSIZs3LIahnh_kMO84igm4zRai83nK5egyeMWcD_x9tuo3mxd4Au8V6Vg3GAx83muNYioae2uRU7md6q9NyhK6Wqf-mqQ4JqiY-Qzvc_w' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "address": "125 Dong Van Cong, District 2, HCM City",
+    "phoneNumber": "0375961181"
+}'
+```
+
+Response
+
+```json
+{
+    "errorCode": 201,
+    "message": "Success",
+    "result": {
+        "id": 2,
+        "address": "125 Dong Van Cong, District 2, HCM City",
+        "phoneNumber": "0375961181"
+    }
+}
+```
+
