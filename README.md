@@ -1298,6 +1298,11 @@ Response
 
 Order service has responsibility when customer place an order. Order service will get cart information from cart service, and place an order for customer.
 
+![SD-Order-Service](https://github.com/Project-nab/discovery-service/blob/master/media/SequenceDiagramOrderService.PNG?raw=true)
+
+* When customer place an order, first ```order service``` will consume ```cart service``` to check cart information (Cart status)
+* When customer input shipment information and save, ```order service``` will save information and also consume ```product-service``` to deduct product's quantity.
+
 ### Database design
 
 #### ER diagram
