@@ -92,7 +92,7 @@ For Frontend we use AngularJS, it's the one of the most javascript framework use
 
 ## Microservice design
 
-![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/Deployment%20DiagramV4.png?raw=true)
+![alt text](https://github.com/Project-nab/discovery-service/blob/master/media/DeploymentDiagramV5.png?raw=true)
 
 ### Description
 
@@ -108,6 +108,7 @@ For Frontend we use AngularJS, it's the one of the most javascript framework use
   * Discovery service: This service responsibility is mange all three microservice (Order service, cart service, product service). Its will enable client side load-balancing and decouples service providers from consumers. We will use spring-cloud-starter-netflix-eureka-server for this part.
   * Distributed tracing: This service will manage all of our microservice logging. In microservice, a service have to communicate with the others service, so we need logging to tracing and monitoring it. We will use ```starter-sleuth``` and ```sleuth-zipkin``` to archive it.
   * Caching: We will have a distributed caching, when a API called, we will query on cache first, if don't have in cache, we move to database and update cache. In our project, we will using ```redis``` as cache
+  * ELK Logging: For microservice, logging is importance, we will use ```logtash``` grab all the log from each service to ```elastic-search``` and using ```kibana``` to monitor it.
   
 
 ## Discovery service
@@ -1291,3 +1292,16 @@ Response
 }
 ```
 
+## Order service
+
+### Analysis
+
+Order service has responsibility when customer place an order. Order service will get cart information from cart service, and place an order for customer.
+
+### Database design
+
+#### ER diagram
+
+![ERD-Order-service](https://github.com/Project-nab/discovery-service/blob/master/media/ERD-ORDER.png?raw=true)
+
+This version just support delivery and customer pay by cash, so we don't included payment service. We just get cart session id and ship to customer. Each order will have each shipment information.
