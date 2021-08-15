@@ -1,38 +1,5 @@
 # NAB PROJECT 
 
-- [NAB PROJECT](#nab-project)
-  * [Problem statement](#problem-statement)
-  * [Highlight](#highlight)
-  * [Project analysis](#project-analysis)
-  * [Technical stacks](#technical-stacks)
-  * [Microservice design](#microservice-design)
-    + [Description](#description)
-  * [Discovery service](#discovery-service)
-  * [Configuration service](#configuration-service)
-  * [API gateway](#api-gateway)
-    + [Basic setup](#basic-setup)
-    + [Secure APIGW](#secure-apigw)
-    + [Testing](#testing)
-  * [Distributed tracing](#distributed-tracing)
-  * [Product-service](#product-service)
-    + [Analysis](#analysis)
-    + [Database design](#database-design)
-      - [ER  Diagram](#er--diagram)
-      - [Database diagram](#database-diagram)
-    + [Code structure](#code-structure)
-    + [Dependencies](#dependencies)
-    + [Configuration](#configuration)
-    + [Unit test](#unit-test)
-      - [Product service test](#product-service-test)
-      - [Brand service test](#brand-service-test)
-      - [Product catalogue service test](#product-catalogue-service-test)
-    + [Code implementation](#code-implementation)
-      - [Filter API](#filter-api)
-      - [API get product detail](#api-get-product-detail)
-    + [Data preparation](#data-preparation)
-    + [Config to APIGW](#config-to-apigw)
-    + [Curl](#curl)
-
 ## Problem statement
 A small start-up named "iCommerce" wants to build a very simple shopping application to sell their
 products. In order to get to the market quickly, they just want to build an MVP version with very 
@@ -50,10 +17,11 @@ Before we go detail, this is some highlight noted:
 2. Configuration service listen on port 8001, and source code at: [Configuration service](https://github.com/Project-nab/configuration-service.git)
 3. All config in this project will be storage centralize at: [config-repo](https://github.com/Project-nab/config-repo.git), another config will load config when starting via configuration service.
 4. APIGW service listen on port 8002, and source code at: [APIGW service](https://github.com/Project-nab/gateway-service.git)
-5. Be sure that your local has been installed ```redis``` for caching, and rate-limit gateway purpose.
+5. Be sure that your local has been installed ```redis``` for caching.
 6. Be sure that your local have ```Zipkin``` for log tracing.
 7. Product service listen on port 8003, and source code at: [Product service](https://github.com/Project-nab/product-service.git)
 8. Cart service listen on port 8004, and source code at: [Cart service](https://github.com/Project-nab/cart-service.git)
+9. Order service listen on port 8005, and source code at: [Order service](https://github.com/Project-nab/order-service.git)
 
 ## Project analysis
 
@@ -62,33 +30,22 @@ Because the company (iCommerce) wants to build an MVP (minimum viable product) t
 Base on problem statement, we will pick three user story will be finished in this sprint.
 
 * Story 1: As a user, I want to filter all product base on category, brand, colour, price range.
-* Story 2: As a user, I want to search all product base on name, brand
-* Story 3: As a user, I want to add product to shoping cart and place an order. (This sprint we just only support payment by cash)
+* Story 2: As a user, I want to add product to shoping cart and place an order. (This sprint we just only support payment by cash)
 
 With that three user story, we breakdown to detail task have to finished in the first sprint of a project.
 
 * Story 1: As a user, I want to filter all product base on category, brand, colour, price range
 
   * Task 1: Implement backend API to filter product base on criteria
-  * Task 2: Implement frontend allow user can filter product base on category: brand, colour, price range. And show the result backend return.
 
-* Story 2: As a user, I want to search all product base on name, brand
-
-  * Task 1: Implement API search all product base on keywork: product's name, product's brand.
-  * Task 2: Implement frontend allow user can type keywork in search bar, and show result when backend return.
-  
-* Story 3: As a user, I want to add product to shopping cart and place an order, and make payment by cash.
+* Story 2: As a user, I want to add product to shopping cart and place an order, and make payment by cash.
 
   * Task 1: Implement API to add a product to shopping cart.
   * Task 2: Implement API to place an order.
     * Task 2.1: Implement API to update product quantity when customer place an order or cancel an order
-  * Task 3: Implement frontend allow user add a product to shopping cart.
-  * Task 4: Implement frontend allow user place an order.
   
 ## Technical stacks
 We will user Java (version 8) with Spring boot, Spring cloud framework to build backend system for this web page. Web application will be designed following microservice 
-
-For Frontend we use AngularJS, it's the one of the most javascript framework use to develop web application
 
 ## Microservice design
 
@@ -110,6 +67,18 @@ For Frontend we use AngularJS, it's the one of the most javascript framework use
   * Caching: We will have a distributed caching, when a API called, we will query on cache first, if don't have in cache, we move to database and update cache. In our project, we will using ```redis``` as cache
   * ELK Logging: For microservice, logging is importance, we will use ```logtash``` grab all the log from each service to ```elastic-search``` and using ```kibana``` to monitor it.
   
+
+### Sequence diagram
+
+![Full-Sequence-Diagram](https://github.com/Project-nab/discovery-service/blob/master/media/FullSequenceDiagram.PNG?raw=true)
+
+Following microservice design, we have sequence diagram as above
+
+* When user open web page, first, web page redirect to Authentication server ```okta``` User login and authentication server return access token to Webpage
+* When user find a product, web page consume API find product to APIGW including access token, APIGW will routing to product service, find product and return to web page.
+* When user add a product to cart, web page consume APIGW add to cart to APIGW including access token, APIGW will routing to cart service, cart service check product information from product service and return to web page.
+* When user place an order, web page consume API place an order to APIGW including access token, APIGW will routing to order service, order service check cart information from cart service, and return to web page.
+* When user input shipment information, web page consume API shipment to APIGW including access token, APIGW will routing to order service, order service update product information and return to web page.
 
 ## Discovery service
 
@@ -223,7 +192,7 @@ We also use Spring boot security to authenticate API when query configuration
 
 Spring-boot-starter-security provides us a security layer, our config-service will more secure with just only service have username/password can query the config.
 
-In application.properties, we add some basic configuration as bellow:
+In ```application.properties```, we add some basic configuration as bellow:
 
 ```properties
 server.port=8001
@@ -369,7 +338,7 @@ Now, we already have Discovery service and Configuration service, we will use th
 To create an Spring cloud APIGW and connect to Discovery service and Configuration service, we have to add three main dependencies
 
 ```xml
-		<dependency>
+	    <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-gateway</artifactId>
         </dependency>
@@ -442,7 +411,7 @@ This is some basic config for gateway can bootstrap, Gateway-service will read c
 
 ### Secure APIGW
 
-As we mention in [Microservice design](https://github.com/Project-nab/discovery-service#microservice-design), our resources have to secure, and our microservice have to know who is calling (Because stateless), to identify who is calling ```product service``` and ```cart-service``` is same person or not. We will config our APIGW to authentication server connect to [okta](https://developer.okta.com/) to authenticate request.
+As we mention in [Microservice design](https://github.com/Project-nab/discovery-service#microservice-design), our resources have to secure, and our microservice have to know who is calling (Because stateless), to identify who is calling ```product service```, ```cart-service```, ```order-service``` is same person or not. We will config our APIGW to authentication server connect to [okta](https://developer.okta.com/) to authenticate request.
 
 Dependencies
 
@@ -476,7 +445,7 @@ We also need to add some config in our gateway to make sure that all request (ex
     }
 ```
 
-### Testing
+### Unit test
 
 Because now, we don't have any upstream service to routing, so let create a sample request
 
@@ -494,6 +463,82 @@ Because now, we don't have any upstream service to routing, so let create a samp
 ```
 
 When user hit ```/greeting``` it will redirect to login page of okta, user will login and we return username, IdToken and accessToken. After that, client (web app) will use ```accessToken``` in Authorization header to access our resources.
+
+we also create sample rest controller for testing purpose
+
+```java
+    @RequestMapping(value = "/users", method = RequestMethod.GET)
+    public List<UserResponse> getUser() {
+        List<UserResponse> userResponses = new ArrayList<>();
+        UserResponse userResponse = new UserResponse("baonc93@gmail.com", "0375961181");
+        userResponses.add(userResponse);
+
+        UserResponse userResponse1 = new UserResponse("test@gmail.com", "0375921103");
+        userResponses.add(userResponse1);
+        return userResponses;
+    }
+```
+
+And now, write some unit test with this rest controller
+
+Firstly, we need to get access token
+
+```java
+    private String getAccessToken() {
+        MultiValueMap<String, String> param = new LinkedMultiValueMap<>();
+        param.add("grant_type", "password");
+        param.add("redirect_uri", "com.okta.dev-56264046:/callback");
+        param.add("username", "baonc93@gmail.com");
+        param.add("password", "Abc13579");
+        param.add("scope", "openid");
+
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBasicAuth("0oa1gwoi7eoayeA7N5d7", "XahfCL7_EA4rkJmOeJZVjFxRo4Y6sme-l6GzD9Zg");
+        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(param, headers);
+        GetTokenResponse getTokenResponse = restTemplate.postForObject("https://dev-56264046.okta.com/oauth2/default/v1/token",
+                entity, GetTokenResponse.class);
+        return getTokenResponse.getAccess_token();
+    }
+```
+
+And then, consume API with access token will return resource information
+
+```java
+    @Test
+    public void whenRequestWithAccessToken_thenReturnResult() {
+        // When
+        String accessToken = getAccessToken();
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        HttpEntity<?> entity = new HttpEntity<>(headers);
+        String url = "http://localhost:" + port + "/users";
+        ResponseEntity<List> response = restTemplate.exchange(url, HttpMethod.GET, entity,
+                List.class);
+
+        // Then
+        assertEquals(2, response.getBody().size());
+    }
+```
+
+Consume API without access token with throw exception ```HttpCLientErrorException.Unauthorized```
+
+```java
+@Test(expected = HttpClientErrorException.Unauthorized.class)
+    public void whenRequestWithouAccessToken_thenThrowException() {
+        // When
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth("");
+        HttpEntity<?> entity = new HttpEntity<>(headers);
+        String url = "http://localhost:" + port + "/users";
+        ResponseEntity<List> response = restTemplate.exchange(url, HttpMethod.GET, entity,
+                List.class);
+    }
+```
 
 Now, let buid, run unit test and open browser to url
 
@@ -851,6 +896,40 @@ This API is quite easy, we will find in cache first, and if in cache don't have,
     }
 ```
 
+#### API update product quantity
+
+API update product quantity will be used when customer order a product, we have to update back product quantity. We will deploy our service in many instances, and can scale up in the future, so we have to synchronized it, to be sure that we dont have dirty read and dirty write, we lock row of product code when make update product quantity
+
+```java
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<Product> findByCode(String code);
+```
+
+and then, in update product quantity, we mark it ```@Transactional``` annotation, this annotation will lock one row by product code, and will release when function finished (update or rollback the quantity)
+
+```java
+    @Override
+    @Transactional
+    public Product updateProductQuantity(String productCode, int quantity) throws ProductNotFoundException,
+            NegativeProductQuantityException {
+        if(quantity < 0) {
+            throw new NegativeProductQuantityException("Update negative quantity exception " + productCode);
+        }
+        Optional<Product> product = productRepo.findByCode(productCode);
+        if(product.isPresent()) {
+            int newQuantity = product.get().getQuantity() - quantity;
+            if(newQuantity < 0) {
+                throw new NegativeProductQuantityException("Product code have negative quantity " + productCode);
+            }
+            product.get().setQuantity(newQuantity);
+            return productRepo.save(product.get());
+        }
+        throw new ProductNotFoundException("Product code not found " + productCode);
+    }
+```
+
+
+
 ### Data preparation
 
 We also create some data in ```data.sql``` to prepare some data for testing purpose
@@ -864,6 +943,8 @@ insert into product_catalogue(catalogue_code, catalogue_name, catalogue_type) va
 insert into product(product_code, color, price, product_name, quantity, brand_code, product_catalogue_code) values
 ('ADIDAS_TSHIRT_01', 0, 50, 'T-shirt', 100, 'ADIDAS', 'ADIDAS_01');
 ```
+
+
 
 ### Config to APIGW
 
@@ -1154,7 +1235,7 @@ spring.cloud.gateway.routes[2].predicates[0].args[pattern]=/cart-service/v1/**
 
 ### Curl
 
-Now let try to curl our API via APIGW
+Now let buid, run unit test and try to curl our API via APIGW
 
 API add a product to shopping cart. Don't forget to add our Bearer token.
 
@@ -1518,7 +1599,7 @@ We will get username  via ```spring security``` principal and then place an orde
 
 ### Curl
 
-Now let try to curl ```order-service``` via APIGW
+Now let build, run unit test and try to curl ```order-service``` via APIGW
 
 Place an order API
 
@@ -1573,4 +1654,3 @@ Response
     }
 }
 ```
-
