@@ -18,7 +18,7 @@ Before we go detail, this is some highlight noted:
 3. All config in this project will be storage centralize at: [config-repo](https://github.com/Project-nab/config-repo.git), another config will load config when starting via configuration service.
 4. APIGW service listen on port 8002, and source code at: [APIGW service](https://github.com/Project-nab/gateway-service.git)
 5. Be sure that your local has been installed ```redis``` for caching.
-6. Be sure that your local have ```Zipkin``` for log tracing.
+6. Be sure that your local have been installed ```Zipkin``` for log tracing.
 7. Product service listen on port 8003, and source code at: [Product service](https://github.com/Project-nab/product-service.git)
 8. Cart service listen on port 8004, and source code at: [Cart service](https://github.com/Project-nab/cart-service.git)
 9. Order service listen on port 8005, and source code at: [Order service](https://github.com/Project-nab/order-service.git)
@@ -54,15 +54,15 @@ We will user Java (version 8) with Spring boot, Spring cloud framework to build 
 ### Description
 
 * Base on requirement, scope and user story we already defined, we designed three microservice:
-  * Product service: This service responsibility to manage product, when user access web page, will all product, filter, search product will consume API from this service.
-  * Cart service: This service responsibility to manage shopping cart, when user add a product to shopping cart and checkout, will consume API from this service.
+  * Product service: This service responsibility to manage product, when user access web page, it will show all product, filter, search product will consume API from this service.
+  * Cart service: This service responsibility to manage shopping cart, when user add a product to shopping cart, will consume API from this service.
   * Order service: This service responsibility to manage user place an order. When user place an order will consume to this service.
 
-* Further more, we will have three basic module when we deploy on cloud is:
+* Further more, we will have others module when we deploy on cloud is:
   * APIGW: This module will take care routing to upstream service when have request from web page.
   * Authentication Server: Our three service ```product-service```, ```cart-service```, ```order-service``` is resources service, and we have to protected it by authentication and authorization. In this project, we will use [okta](https://developer.okta.com/) to manage user and secure APIGW. Every request have to pass ```Bearer token``` to access our resources. Also, our microservice is state less, we need to know who is calling ```product-service``` and who is calling ```cart-service``` is same person. With, secure to identity user, will help to archive this both goals.
   * Config service: This service responsibility is manage configuration of all microservice.
-  * Discovery service: This service responsibility is mange all three microservice (Order service, cart service, product service). Its will enable client side load-balancing and decouples service providers from consumers. We will use spring-cloud-starter-netflix-eureka-server for this part.
+  * Discovery service: This service responsibility is mange all three microservice (Order service, cart service, product service). Its will enable client side load-balancing and decouples service providers from consumers. We will use ```spring-cloud-starter-netflix-eureka-server``` for this part.
   * Distributed tracing: This service will manage all of our microservice logging. In microservice, a service have to communicate with the others service, so we need logging to tracing and monitoring it. We will use ```starter-sleuth``` and ```sleuth-zipkin``` to archive it.
   * Caching: We will have a distributed caching, when a API called, we will query on cache first, if don't have in cache, we move to database and update cache. In our project, we will using ```redis``` as cache
   * ELK Logging: For microservice, logging is importance, we will use ```logtash``` grab all the log from each service to ```elastic-search``` and using ```kibana``` to monitor it.
@@ -550,7 +550,7 @@ And we will see login page
 
 ![LoginPage](https://github.com/Project-nab/discovery-service/blob/master/media/LoginPage.PNG?raw=true)
 
-Login with username is: ```baonc93@gmail.com``` and password is: ```Abc13579```, and we will have username, Idtoken and accessToken
+Login with username is: ```baonc93@gmail.com``` and password is: ```Abc13579```, and we will have username, Idtoken and accessToken. Or we can register new register by ourself. ```Okta``` will help us to manage user.
 
 ![Afterlogin](https://github.com/Project-nab/discovery-service/blob/master/media/AfterLoginGateway.PNG?raw=true)
 
